@@ -1,15 +1,17 @@
 package cz.janhrcek.randomfailures;
 
+import java.time.LocalDateTime;
+
 public class TestFailure {
 
     private String url;
-    private String date;
+    private LocalDateTime date;
     private String testClass;
     private String testMethod;
     private String stackTrace;
 
     public TestFailure(String url,
-            String date,
+            LocalDateTime date,
             String testClass,
             String testMethod,
             String stackTrace) {
@@ -24,7 +26,7 @@ public class TestFailure {
         return url;
     }
 
-    public String getDate() {
+    public LocalDateTime getDate() {
         return date;
     }
 

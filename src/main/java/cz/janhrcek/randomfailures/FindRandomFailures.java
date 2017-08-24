@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +26,9 @@ public class FindRandomFailures {
 
     private static WebDriver driver;
     private static List<TestFailure> failures = new ArrayList<>();
+    private static DateTimeFormatter
+            DATE_TIME_PARSE_FORMAT = DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a"),
+            DATE_TIME_PRINT_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     public static void main(String[] args) throws IOException {
         driver = new ChromeDriver();
@@ -57,8 +62,12 @@ public class FindRandomFailures {
     private static void reportFailure(PrintWriter out, Map.Entry<String, List<TestFailure>> entry) {
         List<TestFailure> failures = entry.getValue();
         out.println(failures.size() + " failures " + entry.getKey());
-        String failureDates = failures.stream().map(f -> f.getDate()).collect(Collectors.joining(";", "[", "]"));
-        out.println(failureDates);
+        String sortedFailureDates = failures.stream()
+                .map(f -> f.getDate())
+                .sorted()
+                .map(d -> d.format(DATE_TIME_PRINT_FORMAT))
+                .collect(Collectors.joining(";", "[", "]"));
+        out.println(sortedFailureDates);
         out.println(failures);
     }
 
@@ -101,8 +110,9 @@ public class FindRandomFailures {
                 String testStatus = test.path("status").asText();
 
                 if ("FAILED".equals(testStatus) || "REGRESSION".equals(testStatus)) {
+                    LocalDateTime buildDateTime = LocalDateTime.parse(unstableBuild.getDate(), DATE_TIME_PARSE_FORMAT);
                     failures.add(new TestFailure(unstableBuild.getUrl(),
-                                    unstableBuild.getDate(),
+                                    buildDateTime,
                                     test.path("className").asText(),
                                     test.path("name").asText(),
                                     test.path("errorStackTrace").asText()
@@ -110,12 +120,16 @@ public class FindRandomFailures {
                     );
                 }
 
-                if (!"PASSED|SKIPPED|FAILED|REGRESSION|FIXED".contains(testStatus)) {
-                    driver.quit();
-                    System.out.println("Unknown test status: " + testStatus);
-                    System.exit(1);
-                }
+                dieIfUnknownStatus(testStatus);
             }
+        }
+    }
+
+    private static void dieIfUnknownStatus(String testStatus) {
+        if (!"PASSED|SKIPPED|FAILED|REGRESSION|FIXED".contains(testStatus)) {
+            driver.quit();
+            System.out.println("Unknown test status: " + testStatus);
+            System.exit(1);
         }
     }
 }
