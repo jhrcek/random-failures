@@ -2,39 +2,40 @@ package cz.janhrcek.randomfailures;
 
 import static java.util.stream.Collectors.toList;
 
-import java.io.FileOutputStream;
+import java.io.File;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
 
-public class FindRandomFailures {
+public class ScrapeFailures {
 
     private static WebDriver driver;
-    private static List<TestFailure> failures = new ArrayList<>();
-    private static DateTimeFormatter
-            DATE_TIME_PARSE_FORMAT = DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a"),
-            DATE_TIME_PRINT_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static Set<TestFailure> failures = new HashSet<>();
+    private static DateTimeFormatter DATE_TIME_PARSE_FORMAT = DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a");
 
     public static void main(String[] args) throws IOException {
         driver = new ChromeDriver();
 
         List<String> jobLinks = getMasterPrJobLinks();
-        List<UnstableBuild> unstableBuilds = jobLinks.stream().flatMap(jobLink -> getUnstableBuilds(jobLink)).collect(toList());
+        List<UnstableBuild> unstableBuilds = jobLinks.stream()
+                .flatMap(ScrapeFailures::getUnstableBuilds)
+                .collect(toList());
+
+        System.out.println(unstableBuilds.size() + " unstable builds to scrape");
+
         unstableBuilds.forEach(url -> {
             try {
                 collectTestFailures(url);
@@ -43,32 +44,9 @@ public class FindRandomFailures {
             }
         });
 
-        Map<String, List<TestFailure>> failuresGroupedByClassAndMethod = failures.stream().collect(
-                Collectors.groupingBy(
-                        (TestFailure failure) -> failure.getTestClass() + "#" + failure.getTestMethod(),
-                        Collectors.toList()
-                )
-        );
-
-        try (PrintWriter out = new PrintWriter(new OutputStreamWriter(new FileOutputStream("results" + LocalDate.now() + ".txt")))) {
-            out.println("----- Failure defails grouped by TestClass#testMethod -----");
-            failuresGroupedByClassAndMethod.entrySet()
-                    .forEach(entry -> reportFailure(out, entry));
-        }
+        saveFailuresToFile(failures);
 
         driver.close();
-    }
-
-    private static void reportFailure(PrintWriter out, Map.Entry<String, List<TestFailure>> entry) {
-        List<TestFailure> failures = entry.getValue();
-        out.println(failures.size() + " failures " + entry.getKey());
-        String sortedFailureDates = failures.stream()
-                .map(f -> f.getDate())
-                .sorted()
-                .map(d -> d.format(DATE_TIME_PRINT_FORMAT))
-                .collect(Collectors.joining(";", "[", "]"));
-        out.println(sortedFailureDates);
-        out.println(failures);
     }
 
     private static List<String> getMasterPrJobLinks() {
@@ -109,6 +87,7 @@ public class FindRandomFailures {
                 JsonNode test = casesArray.get(j);
                 String testStatus = test.path("status").asText();
 
+                // Possible status values seem to be : PASSED, SKIPPED, FAILED, REGRESSION, FIXED
                 if ("FAILED".equals(testStatus) || "REGRESSION".equals(testStatus)) {
                     LocalDateTime buildDateTime = LocalDateTime.parse(unstableBuild.getDate(), DATE_TIME_PARSE_FORMAT);
                     failures.add(new TestFailure(unstableBuild.getUrl(),
@@ -119,17 +98,19 @@ public class FindRandomFailures {
                             )
                     );
                 }
-
-                dieIfUnknownStatus(testStatus);
             }
         }
     }
 
-    private static void dieIfUnknownStatus(String testStatus) {
-        if (!"PASSED|SKIPPED|FAILED|REGRESSION|FIXED".contains(testStatus)) {
-            driver.quit();
-            System.out.println("Unknown test status: " + testStatus);
-            System.exit(1);
-        }
+    private static void saveFailuresToFile(Set<TestFailure> failures) throws IOException {
+        String filename = "results" + LocalDate.now() + ".txt";
+        File outputFile = new File(filename);
+        saveToJson(failures, outputFile);
+    }
+
+    private static void saveToJson(Set<TestFailure> failures, File outputFile) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.writeValue(outputFile, failures);
     }
 }
