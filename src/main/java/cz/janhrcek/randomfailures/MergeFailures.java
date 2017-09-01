@@ -36,6 +36,7 @@ public class MergeFailures {
         );
 
         failureCountsGroupedByClassAndMethod.entrySet()
+                //.stream().filter(e -> e.getValue() > 1).collect(toSet())
                 .forEach(e -> System.out.println(e.getValue() + " failures " + e.getKey()));
 
         Map<String, List<TestFailure>> failuresGroupedByClassAndMethod = mergedFailures.stream().collect(
@@ -56,7 +57,7 @@ public class MergeFailures {
     }
 
     private static File[] findReports() {
-        File reportsDir = new File("/home/jhrcek/Devel/github.com/jhrcek/random-failures/");
+        File reportsDir = new File("/home/jhrcek/Dropbox/Projects/randomFailuresAnalysis");
         if (!reportsDir.exists() || !reportsDir.isDirectory()) {
             throw new IllegalArgumentException("reportsDir must be existing directory");
         }
