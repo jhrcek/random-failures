@@ -2,6 +2,7 @@ module Main exposing (..)
 
 import Html exposing (Html, button, div, text)
 import Json.Decode as Decode exposing (..)
+import Time.DateTime as Date exposing (DateTime, zero)
 
 
 main : Html msg
@@ -11,7 +12,7 @@ main =
 
 type alias TestFailure =
     { url : String
-    , date : List Int
+    , date : DateTime
     , testClass : String
     , testMethod : String
     , stackTrace : String
@@ -27,10 +28,24 @@ testFailureDecoder : Decoder TestFailure
 testFailureDecoder =
     Decode.map5 TestFailure
         (field "url" string)
-        (field "date" (list int))
+        (field "date" dateTimeDecoder)
         (field "testClass" string)
         (field "testMethod" string)
         (field "stackTrace" string)
+
+
+dateTimeDecoder : Decoder DateTime
+dateTimeDecoder =
+    list int
+        |> Decode.andThen
+            (\xs ->
+                case xs of
+                    [ yr, mn, d, h, m ] ->
+                        Decode.succeed <| Date.dateTime { zero | year = yr, month = mn, day = d, hour = h, minute = m }
+
+                    flds ->
+                        Decode.fail <| "Unable to parse date from fields" ++ toString flds
+            )
 
 
 data : String
