@@ -1,5 +1,7 @@
 module Main exposing (..)
 
+import Dict
+import Dict.Extra
 import Html exposing (Html, button, div, text)
 import Json.Decode as Decode exposing (..)
 import Time.DateTime as Date exposing (DateTime, zero)
@@ -21,7 +23,9 @@ type alias TestFailure =
 
 proc : List TestFailure -> String
 proc =
-    String.join "\n" << List.map (\{ date } -> toString date)
+    toString
+        << Dict.map (\_ failures -> List.map (\tf -> tf.date) failures)
+        << Dict.Extra.groupBy (\failure -> failure.testClass ++ "#" ++ failure.testMethod)
 
 
 testFailureDecoder : Decoder TestFailure
