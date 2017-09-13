@@ -108,7 +108,7 @@ public class ScrapeFailures {
         saveToJson(failures, outputFile);
     }
 
-    private static void saveToJson(Set<TestFailure> failures, File outputFile) throws IOException {
+    static void saveToJson(Set<TestFailure> failures, File outputFile) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         mapper.writeValue(outputFile, failures);

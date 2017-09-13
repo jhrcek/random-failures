@@ -5,9 +5,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -17,7 +15,6 @@ public class MergeFailures {
     public static void main(String[] args) throws IOException {
         File[] reportFiles = findReports();
         System.out.println("Going to merge " + reportFiles.length + " report files");
-
         Set<TestFailure> mergedFailures = new HashSet<>();
 
         for (File reportFile : reportFiles) {
@@ -28,25 +25,7 @@ public class MergeFailures {
 
         System.out.println("Found " + mergedFailures.size() + " unique failures in total");
 
-        Map<String, Long> failureCountsGroupedByClassAndMethod = mergedFailures.stream().collect(
-                Collectors.groupingBy(
-                        (TestFailure failure) -> failure.getTestClass() + "#" + failure.getTestMethod(),
-                        Collectors.counting()
-                )
-        );
-
-        failureCountsGroupedByClassAndMethod.entrySet()
-                //.stream().filter(e -> e.getValue() > 1).collect(toSet())
-                .forEach(e -> System.out.println(e.getValue() + " failures " + e.getKey()));
-
-        Map<String, List<TestFailure>> failuresGroupedByClassAndMethod = mergedFailures.stream().collect(
-                Collectors.groupingBy(
-                        (TestFailure failure) -> failure.getTestClass() + "#" + failure.getTestMethod(),
-                        Collectors.toList()
-                )
-        );
-
-        //System.out.println(failuresGroupedByClassAndMethod);
+        ScrapeFailures.saveToJson(mergedFailures, new File("mergedFailures.txt"));
     }
 
     private static List<TestFailure> readReport(File resultsFile) throws IOException {
