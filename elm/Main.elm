@@ -25,8 +25,22 @@ main =
 
 initialModel : Model
 initialModel =
-    { groupedFailures = groupFailuresByClassAndMethod <| parseFailuresJson Input.failureDataJsonString
+    let
+        failures =
+            parseFailuresJson Input.failureDataJsonString
+
+        sortedFailureTimestamps =
+            List.sort <| List.map (DateTime.toTimestamp << .date) failures
+
+        oldestDate =
+            DateTime.fromTimestamp <| Maybe.withDefault 0 <| List.minimum sortedFailureTimestamps
+
+        newestDate =
+            DateTime.fromTimestamp <| Maybe.withDefault 0 <| List.maximum sortedFailureTimestamps
+    in
+    { groupedFailures = groupFailuresByClassAndMethod failures
     , failureCountFilter = 3
+    , dateRangeFilter = ( oldestDate, newestDate )
     , tableState = Table.initialSort stdDevColumnName
     , showingDetails = Nothing
     }
@@ -62,6 +76,7 @@ type Msg
 type alias Model =
     { groupedFailures : GroupedFailures
     , failureCountFilter : Int
+    , dateRangeFilter : ( DateTime, DateTime )
     , tableState : Table.State
     , showingDetails : Maybe ClassAndMethod
     }
@@ -91,19 +106,27 @@ type alias ClassAndMethod =
 view : Model -> Html Msg
 view model =
     div []
-        [ filterControls model.failureCountFilter
+        [ filterControls model
         , failuresTable model
         , detailsView model
         ]
 
 
-filterControls : Int -> Html Msg
-filterControls failureCountFilter =
+filterControls : Model -> Html Msg
+filterControls { failureCountFilter, dateRangeFilter } =
     div []
         [ h3 [] [ text "Filter failures" ]
-        , text "Show tests that failed "
-        , input [ type_ "number", maxlength 2, size 2, onInput ChangeFailureCountFilter, value (toString failureCountFilter) ] []
-        , text " or more times"
+        , div []
+            [ text "Show tests that failed "
+            , input [ type_ "number", maxlength 2, size 2, onInput ChangeFailureCountFilter, value (toString failureCountFilter) ] []
+            , text " or more times"
+            ]
+        , div []
+            [ text "Show failures between "
+            , input [ type_ "text", value <| DateTime.toISO8601 <| Tuple.first dateRangeFilter ] []
+            , text " and "
+            , input [ type_ "text", value <| DateTime.toISO8601 <| Tuple.second dateRangeFilter ] []
+            ]
         ]
 
 
