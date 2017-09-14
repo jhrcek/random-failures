@@ -2,6 +2,8 @@ module Main exposing (..)
 
 import Dict exposing (Dict)
 import Dict.Extra
+import FormatNumber
+import FormatNumber.Locales exposing (usLocale)
 import Html exposing (Html, a, button, div, em, h3, input, strong, text)
 import Html.Attributes exposing (href, maxlength, size, type_, value)
 import Html.Events exposing (onClick, onInput)
@@ -25,7 +27,7 @@ initialModel : Model
 initialModel =
     { groupedFailures = groupFailuresByClassAndMethod <| parseFailuresJson Input.failureDataJsonString
     , failureCountFilter = 3
-    , tableState = Table.initialSort "Failures"
+    , tableState = Table.initialSort stdDevColumnName
     , showingDetails = Nothing
     }
 
@@ -115,6 +117,7 @@ failuresTable model =
     div []
         [ h3 [] [ text "Failures aggregated by class and test method" ]
         , Table.view tableConfig model.tableState acceptedFailures
+        , em [] [ text "* Standard deviation of failure dates (in days)" ]
         ]
 
 
@@ -127,10 +130,28 @@ tableConfig =
             [ Table.stringColumn "Class" (\( ( cl, m ), fs ) -> fqnToSimpleClassName cl)
             , Table.stringColumn "Method" (\( ( cl, m ), fs ) -> m)
             , Table.intColumn "Failures" (\( ( cl, m ), fs ) -> List.length fs)
-            , Table.floatColumn "Std dev of failure dates (in days)" (\( ( cl, m ), fs ) -> standardDeviation <| List.map .date fs)
+            , stdDevColumn
             , detailsColumn
             ]
         }
+
+
+stdDevColumn : Table.Column TableRecord Msg
+stdDevColumn =
+    let
+        getDeviation ( ( cl, m ), fs ) =
+            standardDeviation <| List.map .date fs
+    in
+    Table.customColumn
+        { name = stdDevColumnName
+        , viewData = FormatNumber.format usLocale << getDeviation
+        , sorter = Table.decreasingOrIncreasingBy getDeviation
+        }
+
+
+stdDevColumnName : String
+stdDevColumnName =
+    "Spread of failure dates *"
 
 
 detailsColumn : Table.Column TableRecord Msg
@@ -164,7 +185,7 @@ detailsView model =
                     , text m
                     ]
                 , div [] <| List.map viewFailure <| getSortedFailuresOf ( cl, m ) model.groupedFailures
-                , em [] [ text "* Note that some of the job links might be dead, because archived jobs are deleted after some time" ]
+                , em [] [ text "Note that some of the job links might be dead, because archived jobs are deleted after some time" ]
                 ]
 
 
@@ -183,17 +204,21 @@ viewFailure { url, date, stackTrace } =
 
 formatDate : DateTime -> String
 formatDate =
+    let
+        pad =
+            String.padLeft 2 '0' << toString
+    in
     DateTime.toTuple
         >> (\( year, month, day, hour, minute, _, _ ) ->
                 toString year
                     ++ "-"
-                    ++ (String.padLeft 2 '0' <| toString month)
+                    ++ pad month
                     ++ "-"
-                    ++ (String.padLeft 2 '0' <| toString day)
+                    ++ pad day
                     ++ " "
-                    ++ toString hour
+                    ++ pad hour
                     ++ ":"
-                    ++ toString minute
+                    ++ pad minute
            )
 
 
