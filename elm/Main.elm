@@ -107,9 +107,18 @@ view : Model -> Html Msg
 view model =
     div []
         [ filterControls model
-        , failuresTable model
-        , detailsView model
+        , failuresTableOrFailureDetails model
         ]
+
+
+failuresTableOrFailureDetails : Model -> Html Msg
+failuresTableOrFailureDetails model =
+    case model.showingDetails of
+        Nothing ->
+            failureSummaryTable model
+
+        Just classAndMethod ->
+            failureDetailView classAndMethod model.groupedFailures
 
 
 filterControls : Model -> Html Msg
@@ -130,15 +139,15 @@ filterControls { failureCountFilter, dateRangeFilter } =
         ]
 
 
-failuresTable : Model -> Html Msg
-failuresTable model =
+failureSummaryTable : Model -> Html Msg
+failureSummaryTable model =
     let
         acceptedFailures =
             Dict.toList model.groupedFailures
                 |> List.filter (\( _, failures ) -> List.length failures >= model.failureCountFilter)
     in
     div []
-        [ h3 [] [ text "Failures aggregated by class and test method" ]
+        [ h3 [] [ text "Failure summary" ]
         , Table.view tableConfig model.tableState acceptedFailures
         , em [] [ text "* Standard deviation of failure dates (in days)" ]
         ]
@@ -182,7 +191,7 @@ detailsColumn =
     let
         detailsButton ( ( cl, m ), _ ) =
             { attributes = []
-            , children = [ button [ onClick (ShowDetails ( cl, m )) ] [ text "Details" ] ]
+            , children = [ button [ onClick (ShowDetails ( cl, m )) ] [ text "Details >>" ] ]
             }
     in
     Table.veryCustomColumn
@@ -192,24 +201,19 @@ detailsColumn =
         }
 
 
-detailsView : Model -> Html Msg
-detailsView model =
-    case model.showingDetails of
-        Nothing ->
-            text ""
-
-        Just ( cl, m ) ->
-            div []
-                [ h3 [] [ text "Failure details ", button [ onClick HideDetails ] [ text "hide" ] ]
-                , div []
-                    [ strong [] [ text "Class: " ]
-                    , text <| fqnToSimpleClassName cl
-                    , strong [] [ text " Method: " ]
-                    , text m
-                    ]
-                , div [] <| List.map viewFailure <| getSortedFailuresOf ( cl, m ) model.groupedFailures
-                , em [] [ text "Note that some of the job links might be dead, because archived jobs are deleted after some time" ]
-                ]
+failureDetailView : ClassAndMethod -> GroupedFailures -> Html Msg
+failureDetailView ( cl, m ) groupedFailures =
+    div []
+        [ h3 [] [ button [ onClick HideDetails ] [ text "<< Back to Summary" ], text " Failure details" ]
+        , div []
+            [ strong [] [ text "Class: " ]
+            , text <| fqnToSimpleClassName cl
+            , strong [] [ text " Method: " ]
+            , text m
+            ]
+        , div [] <| List.map viewFailure <| getSortedFailuresOf ( cl, m ) groupedFailures
+        , em [] [ text "Note that some of the job links might be dead, because archived jobs are deleted after some time" ]
+        ]
 
 
 getSortedFailuresOf : ClassAndMethod -> GroupedFailures -> List TestFailure
