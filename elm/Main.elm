@@ -4,11 +4,12 @@ import Dict exposing (Dict)
 import Dict.Extra
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, a, button, div, em, h3, input, strong, text)
-import Html.Attributes exposing (href, maxlength, size, type_, value)
+import Html exposing (Html, a, button, div, em, h3, input, strong, text, textarea)
+import Html.Attributes exposing (cols, href, maxlength, rows, size, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Input
 import Json.Decode as Decode
+import List.Extra
 import Table
 import Time
 import Time.DateTime as DateTime exposing (DateTime, zero)
@@ -105,14 +106,6 @@ type alias ClassAndMethod =
 
 view : Model -> Html Msg
 view model =
-    div []
-        [ filterControls model
-        , failuresTableOrFailureDetails model
-        ]
-
-
-failuresTableOrFailureDetails : Model -> Html Msg
-failuresTableOrFailureDetails model =
     case model.showingDetails of
         Nothing ->
             failureSummaryTable model
@@ -147,7 +140,8 @@ failureSummaryTable model =
                 |> List.filter (\( _, failures ) -> List.length failures >= model.failureCountFilter)
     in
     div []
-        [ h3 [] [ text "Failure summary" ]
+        [ filterControls model
+        , h3 [] [ text "Failure summary" ]
         , Table.view tableConfig model.tableState acceptedFailures
         , em [] [ text "* Standard deviation of failure dates (in days)" ]
         ]
@@ -203,6 +197,13 @@ detailsColumn =
 
 failureDetailView : ClassAndMethod -> GroupedFailures -> Html Msg
 failureDetailView ( cl, m ) groupedFailures =
+    let
+        sortedFailures =
+            getSortedFailuresOf ( cl, m ) groupedFailures
+
+        uniqueStacktraces =
+            List.Extra.unique <| List.map .stackTrace sortedFailures
+    in
     div []
         [ h3 [] [ button [ onClick HideDetails ] [ text "<< Back to Summary" ], text " Failure details" ]
         , div []
@@ -211,8 +212,11 @@ failureDetailView ( cl, m ) groupedFailures =
             , strong [] [ text " Method: " ]
             , text m
             ]
-        , div [] <| List.map viewFailure <| getSortedFailuresOf ( cl, m ) groupedFailures
+        , div [] <| List.map viewFailure sortedFailures
         , em [] [ text "Note that some of the job links might be dead, because archived jobs are deleted after some time" ]
+        , h3 [] [ text "Strack traces" ]
+        , div [] [ text <| "These " ++ toString (List.length sortedFailures) ++ " failures have " ++ toString (List.length uniqueStacktraces) ++ " unique stacktraces" ]
+        , div [] <| List.map (\st -> div [] [ textarea [ value st, cols 160, rows 10 ] [] ]) uniqueStacktraces
         ]
 
 
