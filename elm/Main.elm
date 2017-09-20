@@ -4,7 +4,7 @@ import Dict exposing (Dict)
 import Dict.Extra
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, a, button, div, em, h3, input, strong, text, textarea)
+import Html exposing (Html, a, button, div, em, h2, h3, input, strong, table, td, text, textarea, tr)
 import Html.Attributes exposing (cols, href, maxlength, rows, size, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Input
@@ -40,7 +40,7 @@ initialModel =
             DateTime.fromTimestamp <| Maybe.withDefault 0 <| List.maximum sortedFailureTimestamps
     in
     { groupedFailures = groupFailuresByClassAndMethod failures
-    , failureCountFilter = 3
+    , failureCountFilter = 5
     , dateRangeFilter = ( oldestDate, newestDate )
     , tableState = Table.initialSort stdDevColumnName
     , showingDetails = Nothing
@@ -108,10 +108,29 @@ view : Model -> Html Msg
 view model =
     case model.showingDetails of
         Nothing ->
-            failureSummaryTable model
+            mainPage model
 
         Just classAndMethod ->
             failureDetailView classAndMethod model.groupedFailures
+
+
+mainPage : Model -> Html Msg
+mainPage model =
+    div []
+        [ description
+        , filterControls model
+        , failureSummaryTable model
+        ]
+
+
+description : Html Msg
+description =
+    div []
+        [ h2 [] [ text "Random test failure analysis" ]
+        , text "This page lists all tests failed in "
+        , a [ href "https://kie-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/view/PRs/" ] [ text "kie-jenkins PR jobs" ]
+        , text " (master only). Use the filter controls below to focus subset of failures."
+        ]
 
 
 filterControls : Model -> Html Msg
@@ -140,8 +159,7 @@ failureSummaryTable model =
                 |> List.filter (\( _, failures ) -> List.length failures >= model.failureCountFilter)
     in
     div []
-        [ filterControls model
-        , h3 [] [ text "Failure summary" ]
+        [ h3 [] [ text "Failures (grouped by Class and Test method)" ]
         , Table.view tableConfig model.tableState acceptedFailures
         , em [] [ text "* Standard deviation of failure dates (in days)" ]
         ]
@@ -205,17 +223,30 @@ failureDetailView ( cl, m ) groupedFailures =
             List.Extra.unique <| List.map .stackTrace sortedFailures
     in
     div []
-        [ h3 [] [ button [ onClick HideDetails ] [ text "<< Back to Summary" ], text " Failure details" ]
-        , div []
-            [ strong [] [ text "Class: " ]
-            , text <| fqnToSimpleClassName cl
-            , strong [] [ text " Method: " ]
-            , text m
+        [ button [ onClick HideDetails ] [ text "<< Back to Summary" ]
+        , h2 [] [ text " Failure details" ]
+        , table []
+            [ tr []
+                [ td [] [ strong [] [ text "Class: " ] ]
+                , td [] [ text <| fqnToSimpleClassName cl ]
+                ]
+            , tr []
+                [ td [] [ strong [] [ text "Method: " ] ]
+                , td [] [ text m ]
+                ]
+            , tr []
+                [ td [] [ strong [] [ text "Total failures: " ] ]
+                , td [] [ text <| toString <| List.length sortedFailures ]
+                ]
+            , tr []
+                [ td [] [ strong [] [ text "Unique stack traces: " ] ]
+                , td [] [ text <| toString <| List.length uniqueStacktraces ]
+                ]
             ]
+        , h3 [] [ text "Failures" ]
         , div [] <| List.map viewFailure sortedFailures
         , em [] [ text "Note that some of the job links might be dead, because archived jobs are deleted after some time" ]
-        , h3 [] [ text "Strack traces" ]
-        , div [] [ text <| "These " ++ toString (List.length sortedFailures) ++ " failures have " ++ toString (List.length uniqueStacktraces) ++ " unique stacktraces" ]
+        , h3 [] [ text "Stack traces" ]
         , div [] <| List.map (\st -> div [] [ textarea [ value st, cols 160, rows 10 ] [] ]) uniqueStacktraces
         ]
 
