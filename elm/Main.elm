@@ -4,24 +4,31 @@ import Dict exposing (Dict)
 import Dict.Extra
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, a, button, div, em, h2, h3, input, strong, table, td, text, textarea, tr)
-import Html.Attributes exposing (cols, href, maxlength, rows, size, type_, value)
+import Html exposing (Html, a, button, div, em, h2, h3, hr, input, strong, table, td, text, textarea, tr)
+import Html.Attributes as Attr exposing (cols, href, maxlength, rows, size, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Input
 import Json.Decode as Decode
 import List.Extra
 import Table
+import Task
 import Time
 import Time.DateTime as DateTime exposing (DateTime, zero)
 
 
 main : Program Never Model Msg
 main =
-    Html.beginnerProgram
-        { model = initialModel
+    Html.program
+        { init = init
         , view = view
         , update = update
+        , subscriptions = \_ -> Sub.none
         }
+
+
+init : ( Model, Cmd Msg )
+init =
+    ( initialModel, Task.perform SetNow Time.now )
 
 
 initialModel : Model
@@ -44,11 +51,17 @@ initialModel =
     , dateRangeFilter = ( oldestDate, newestDate )
     , tableState = Table.initialSort stdDevColumnName
     , showingDetails = Nothing
+    , now = DateTime.epoch
     }
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    ( updateHelp msg model, Cmd.none )
+
+
+updateHelp : Msg -> Model -> Model
+updateHelp msg model =
     case msg of
         ChangeFailureCountFilter str ->
             let
@@ -66,12 +79,16 @@ update msg model =
         HideDetails ->
             { model | showingDetails = Nothing }
 
+        SetNow timestamp ->
+            { model | now = DateTime.fromTimestamp timestamp }
+
 
 type Msg
     = ChangeFailureCountFilter String
     | SetTableState Table.State
     | ShowDetails ClassAndMethod
     | HideDetails
+    | SetNow Time.Time
 
 
 type alias Model =
@@ -80,6 +97,7 @@ type alias Model =
     , dateRangeFilter : ( DateTime, DateTime )
     , tableState : Table.State
     , showingDetails : Maybe ClassAndMethod
+    , now : DateTime
     }
 
 
@@ -117,37 +135,28 @@ view model =
 mainPage : Model -> Html Msg
 mainPage model =
     div []
-        [ description
+        [ description model.dateRangeFilter
         , filterControls model
         , failureSummaryTable model
         ]
 
 
-description : Html Msg
-description =
+description : ( DateTime, DateTime ) -> Html Msg
+description ( fromDate, toDate ) =
     div []
         [ h2 [] [ text "Random test failure analysis" ]
-        , text "This page lists all tests failed in "
+        , text "This report lists all test failures in "
         , a [ href "https://kie-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/view/PRs/" ] [ text "kie-jenkins PR jobs" ]
-        , text " (master only). Use the filter controls below to focus subset of failures."
+        , text <| " (master branch only) from " ++ formatDate fromDate ++ " to " ++ formatDate toDate ++ "."
         ]
 
 
 filterControls : Model -> Html Msg
-filterControls { failureCountFilter, dateRangeFilter } =
+filterControls { failureCountFilter } =
     div []
-        [ h3 [] [ text "Filter failures" ]
-        , div []
-            [ text "Show tests that failed "
-            , input [ type_ "number", maxlength 2, size 2, onInput ChangeFailureCountFilter, value (toString failureCountFilter) ] []
-            , text " or more times"
-            ]
-        , div []
-            [ text "Show failures between "
-            , input [ type_ "text", value <| DateTime.toISO8601 <| Tuple.first dateRangeFilter ] []
-            , text " and "
-            , input [ type_ "text", value <| DateTime.toISO8601 <| Tuple.second dateRangeFilter ] []
-            ]
+        [ text "Show tests that failed "
+        , input [ type_ "number", maxlength 2, Attr.min "0", Attr.max "100", onInput ChangeFailureCountFilter, value (toString failureCountFilter) ] []
+        , text " or more times"
         ]
 
 
@@ -160,21 +169,23 @@ failureSummaryTable model =
     in
     div []
         [ h3 [] [ text "Failures (grouped by Class and Test method)" ]
-        , Table.view tableConfig model.tableState acceptedFailures
+        , Table.view (tableConfig model.now) model.tableState acceptedFailures
+        , hr [] []
         , em [] [ text "* Standard deviation of failure dates (in days)" ]
         ]
 
 
-tableConfig : Table.Config TableRecord Msg
-tableConfig =
+tableConfig : DateTime -> Table.Config TableRecord Msg
+tableConfig now =
     Table.config
-        { toId = \( ( cl, m ), fs ) -> cl
+        { toId = \( ( cl, _ ), _ ) -> cl
         , toMsg = SetTableState
         , columns =
-            [ Table.stringColumn "Class" (\( ( cl, m ), fs ) -> fqnToSimpleClassName cl)
-            , Table.stringColumn "Method" (\( ( cl, m ), fs ) -> m)
-            , Table.intColumn "Failures" (\( ( cl, m ), fs ) -> List.length fs)
+            [ Table.stringColumn "Class" (\( ( cl, _ ), _ ) -> fqnToSimpleClassName cl)
+            , Table.stringColumn "Method" (\( ( _, m ), _ ) -> m)
+            , Table.intColumn "Failures" (\( ( _, _ ), fs ) -> List.length fs)
             , stdDevColumn
+            , Table.intColumn "Days since last failure" (\( _, fs ) -> daysSinceLastFailure fs now)
             , detailsColumn
             ]
         }
@@ -253,19 +264,21 @@ failureDetailView ( cl, m ) groupedFailures =
 
 getSortedFailuresOf : ClassAndMethod -> GroupedFailures -> List TestFailure
 getSortedFailuresOf classAndMethod =
-    List.sortBy (DateTime.toTimestamp << .date) << Maybe.withDefault [] << Dict.get classAndMethod
+    Maybe.withDefault [] << Dict.get classAndMethod
 
 
 viewFailure : TestFailure -> Html Msg
 viewFailure { url, date, stackTrace } =
     div []
-        [ text <| "Failed on " ++ formatDate date ++ " in job "
+        [ text <| "Failed on " ++ formatDateTime date ++ " in job "
         , a [ href url ] [ text <| String.dropLeft 65 <| String.dropRight 11 url ]
         ]
 
 
-formatDate : DateTime -> String
-formatDate =
+{-| YYYY-MM-DD HH:mm
+-}
+formatDateTime : DateTime -> String
+formatDateTime =
     let
         pad =
             String.padLeft 2 '0' << toString
@@ -282,6 +295,33 @@ formatDate =
                     ++ ":"
                     ++ pad minute
            )
+
+
+{-| YYYY-MM-DD
+-}
+formatDate : DateTime -> String
+formatDate =
+    let
+        pad =
+            String.padLeft 2 '0' << toString
+    in
+    DateTime.toTuple
+        >> (\( year, month, day, _, _, _, _ ) ->
+                toString year
+                    ++ "-"
+                    ++ pad month
+                    ++ "-"
+                    ++ pad day
+           )
+
+
+daysSinceLastFailure : List TestFailure -> DateTime -> Int
+daysSinceLastFailure failures now =
+    -- assuming failures are sorted by failure date
+    List.reverse failures
+        |> List.head
+        |> Maybe.map (.date >> DateTime.delta now >> .days)
+        |> Maybe.withDefault 0
 
 
 fqnToSimpleClassName : String -> String
@@ -315,6 +355,8 @@ standardDeviation dts =
 groupFailuresByClassAndMethod : List TestFailure -> GroupedFailures
 groupFailuresByClassAndMethod =
     Dict.Extra.groupBy (\failure -> ( failure.testClass, failure.testMethod ))
+        -- sort by failure date from oldest to most recent
+        >> Dict.map (\_ failures -> List.sortBy (DateTime.toTimestamp << .date) failures)
 
 
 testFailureDecoder : Decode.Decoder TestFailure
