@@ -181,7 +181,7 @@ summaryLegend =
         , div [] [ text "* Standard deviation of failure dates (in days)" ]
         , h2 [] [ text "When is test method considered to be failing randomly?" ]
         , div []
-            [ text "I'm using the following heuristics to highlight random failures. Test method is considered randomly failing if all of the following conditions hold (open to discussion!):"
+            [ text "The following heuristic is used to highlight random failures. Test test is considered randomly failing if all of the following conditions hold (open to discussion!):"
             , ul []
                 [ li [] [ text "Failed 3 or more times" ]
                 , li [] [ text "Last failure ocurred no longer than 14 days ago" ]
@@ -281,6 +281,9 @@ failureDetailView ( cl, m ) groupedFailures dateRange =
 
         uniqueStacktraces =
             List.Extra.uniqueBy (\st -> String.split "\t" st |> List.tail |> toString) stacktraces
+
+        getRowsToDisplay stacktrace =
+            min 10 (1 + List.length (String.lines stacktrace))
     in
     div []
         [ button [ onClick HideDetails ] [ text "<< Back to Summary" ]
@@ -312,7 +315,7 @@ failureDetailView ( cl, m ) groupedFailures dateRange =
         , h3 [] [ text "Failures ", a [ href "#three" ] [ text "(3)" ] ]
         , div [] <| List.map viewFailure sortedFailures
         , h3 [] [ text "Unique Stack Traces" ]
-        , div [] <| List.map (\st -> div [] [ textarea [ value st, cols 160, rows 10 ] [] ]) uniqueStacktracesAndMessages
+        , div [] <| List.map (\st -> div [] [ textarea [ value st, cols 160, rows <| getRowsToDisplay st ] [] ]) uniqueStacktracesAndMessages
         , detailsLegend
         ]
 
