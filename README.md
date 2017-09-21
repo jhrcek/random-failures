@@ -6,17 +6,19 @@ The project consists of 2 parts:
 - interactive web page report written in elm which enables analyzing data scraped by the above script
 
 
-## Working with report
+## Working with the report
 
-The report shows test failure data grouped by Test class & test method.
-The main page shows number of failures and standard deviation of failure Date & Time (in days).
-You can *sort table columns* and click Details button to see list of failures of that method sorted by failure date.
-Failures time line shows how the failures of given method are spread over date
-  - failures whose date of failures are clustered indicate most likely true positive
-  - failures whose date of failures are spread over longer period of time are probably random
-You can *restrict which data are displayed* by number of failures
+The report has two views:
+1. Summary view which shows test failure data grouped by test class & test method.
+For each test method the table is showing the following columns (all columns are sortable)
+   - Number of failures
+   - Standard deviation of failure dates (in days)
+   - Number of days since last failure
 
-
-# TODO
-- visualize spread of failure dates on a time line
-- make it possible to filter failures by restricting date of failure
+2. Details view for each test method which shows
+   - Basic stats about test method
+     - Total failures
+     - Number of unique stack traces (including message) = stacktrace & exception message identical
+     - Number of unique stack trace (excluding message) = test failed at the same point, but with different message
+   - Spread of dates of failure dates
+   - Listing of unique stacktraces

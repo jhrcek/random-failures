@@ -129,7 +129,7 @@ view model =
             mainPage model
 
         Just classAndMethod ->
-            failureDetailView classAndMethod model.groupedFailures
+            failureDetailView classAndMethod model.groupedFailures model.dateRangeFilter
 
 
 mainPage : Model -> Html Msg
@@ -264,11 +264,14 @@ detailsColumn =
         }
 
 
-failureDetailView : ClassAndMethod -> GroupedFailures -> Html Msg
-failureDetailView ( cl, m ) groupedFailures =
+failureDetailView : ClassAndMethod -> GroupedFailures -> ( DateTime, DateTime ) -> Html Msg
+failureDetailView ( cl, m ) groupedFailures dateRange =
     let
         sortedFailures =
             getSortedFailuresOf ( cl, m ) groupedFailures
+
+        failureTimestamps =
+            List.map (DateTime.toTimestamp << .date) sortedFailures
 
         stacktraces =
             List.map .stackTrace sortedFailures
@@ -304,7 +307,9 @@ failureDetailView ( cl, m ) groupedFailures =
                 , td [] [ text <| toString <| List.length uniqueStacktraces ]
                 ]
             ]
-        , h3 [] [ text "Failures " ]
+        , h3 [] [ text "Spread of failure dates" ]
+        , viewFailureDatesChart dateRange failureTimestamps
+        , h3 [] [ text "Failures ", a [ href "#three" ] [ text "(3)" ] ]
         , div [] <| List.map viewFailure sortedFailures
         , h3 [] [ text "Unique Stack Traces" ]
         , div [] <| List.map (\st -> div [] [ textarea [ value st, cols 160, rows 10 ] [] ]) uniqueStacktracesAndMessages
@@ -320,6 +325,49 @@ detailsLegend =
         , div [ Attr.id "two" ] [ text "(2) Total number unique stack traces that are different disregarding exception message (just looking at WHERE the failure was, ignoring exception message)" ]
         , div [ Attr.id "three" ] [ text "(3) Some of the job links might be dead, because archived jobs are deleted after some time" ]
         ]
+
+
+viewFailureDatesChart : ( DateTime, DateTime ) -> List Float -> Html a
+viewFailureDatesChart ( fromDate, toDate ) timestamps =
+    let
+        leastTimestamp =
+            DateTime.toTimestamp fromDate
+
+        biggestTimestamp =
+            DateTime.toTimestamp toDate
+
+        timestampRange =
+            biggestTimestamp - leastTimestamp
+
+        relativePosition : Float -> Float
+        relativePosition t =
+            100 * (t - leastTimestamp) / timestampRange
+    in
+    List.map
+        (\t ->
+            div
+                [ style
+                    [ ( "width", "10px" )
+                    , ( "height", "10px" )
+                    , ( "border-radius", "5px" )
+                    , ( "position", "absolute" )
+                    , ( "background-color", "red" )
+                    , ( "left", toString (relativePosition t) ++ "%" )
+                    , ( "transform", "rotate(-45deg)" )
+                    , ( "white-space", "pre" )
+                    ]
+                ]
+                [ text <| "   " ++ formatDateTime (DateTime.fromTimestamp t) ]
+        )
+        timestamps
+        |> div
+            [ style
+                [ ( "background-color", "lightgray" )
+                , ( "position", "relative" )
+                , ( "height", "10px" )
+                , ( "margin-top", "80px" )
+                ]
+            ]
 
 
 getSortedFailuresOf : ClassAndMethod -> GroupedFailures -> List TestFailure
