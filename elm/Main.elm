@@ -4,13 +4,13 @@ import Dict exposing (Dict)
 import Dict.Extra
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, a, button, div, em, h2, h3, hr, input, strong, table, td, text, textarea, tr)
-import Html.Attributes as Attr exposing (cols, href, maxlength, rows, size, type_, value)
+import Html exposing (Html, a, button, div, h2, h3, hr, input, li, span, strong, table, td, text, textarea, tr, ul)
+import Html.Attributes as Attr exposing (cols, href, maxlength, rows, size, style, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Input
 import Json.Decode as Decode
 import List.Extra
-import Table
+import Table exposing (defaultCustomizations)
 import Task
 import Time
 import Time.DateTime as DateTime exposing (DateTime, zero)
@@ -47,7 +47,7 @@ initialModel =
             DateTime.fromTimestamp <| Maybe.withDefault 0 <| List.maximum sortedFailureTimestamps
     in
     { groupedFailures = groupFailuresByClassAndMethod failures
-    , failureCountFilter = 5
+    , failureCountFilter = 3
     , dateRangeFilter = ( oldestDate, newestDate )
     , tableState = Table.initialSort stdDevColumnName
     , showingDetails = Nothing
@@ -170,14 +170,30 @@ failureSummaryTable model =
     div []
         [ h3 [] [ text "Failures (grouped by Class and Test method)" ]
         , Table.view (tableConfig model.now) model.tableState acceptedFailures
-        , hr [] []
-        , em [] [ text "* Standard deviation of failure dates (in days)" ]
+        , summaryLegend
+        ]
+
+
+summaryLegend : Html Msg
+summaryLegend =
+    div []
+        [ hr [] []
+        , div [] [ text "* Standard deviation of failure dates (in days)" ]
+        , h2 [] [ text "When is test method considered to be failing randomly?" ]
+        , div []
+            [ text "I'm using the following heuristics to highlight random failures. Test method is considered randomly failing if all of the following conditions hold (open to discussion!):"
+            , ul []
+                [ li [] [ text "Failed 3 or more times" ]
+                , li [] [ text "Last failure ocurred no longer than 14 days ago" ]
+                , li [] [ text "Standard deviation of failure dates is 4 days or more" ]
+                ]
+            ]
         ]
 
 
 tableConfig : DateTime -> Table.Config TableRecord Msg
 tableConfig now =
-    Table.config
+    Table.customConfig
         { toId = \( ( cl, _ ), _ ) -> cl
         , toMsg = SetTableState
         , columns =
@@ -188,13 +204,37 @@ tableConfig now =
             , Table.intColumn "Days since last failure" (\( _, fs ) -> daysSinceLastFailure fs now)
             , detailsColumn
             ]
+        , customizations =
+            { defaultCustomizations
+                | rowAttrs =
+                    \( _, fs ) ->
+                        if isProbablyRandom fs now then
+                            [ style [ ( "background-color", "salmon" ) ] ]
+                        else
+                            []
+            }
         }
+
+
+isProbablyRandom : List TestFailure -> DateTime -> Bool
+isProbablyRandom fs now =
+    let
+        lastFailureDaysAgo =
+            daysSinceLastFailure fs now
+
+        failureDatesStdDev =
+            standardDeviation <| List.map .date fs
+
+        failureCount =
+            List.length fs
+    in
+    failureCount >= 3 && lastFailureDaysAgo < 14 && failureDatesStdDev > 5
 
 
 stdDevColumn : Table.Column TableRecord Msg
 stdDevColumn =
     let
-        getDeviation ( ( cl, m ), fs ) =
+        getDeviation ( _, fs ) =
             standardDeviation <| List.map .date fs
     in
     Table.customColumn
