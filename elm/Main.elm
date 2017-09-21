@@ -145,9 +145,9 @@ description : ( DateTime, DateTime ) -> Html Msg
 description ( fromDate, toDate ) =
     div []
         [ h2 [] [ text "Random test failure analysis" ]
-        , text "This report lists all test failures in "
+        , text "This report was generated on GENERATED_ON_PLACEHOLDER and lists all test failures in "
         , a [ href "https://kie-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/view/PRs/" ] [ text "kie-jenkins PR jobs" ]
-        , text <| " (master branch only) from " ++ formatDate fromDate ++ " to " ++ formatDate toDate ++ "."
+        , text <| " (master only) from " ++ formatDate fromDate ++ " to " ++ formatDate toDate ++ "."
         ]
 
 
@@ -230,8 +230,14 @@ failureDetailView ( cl, m ) groupedFailures =
         sortedFailures =
             getSortedFailuresOf ( cl, m ) groupedFailures
 
+        stacktraces =
+            List.map .stackTrace sortedFailures
+
+        uniqueStacktracesAndMessages =
+            List.Extra.unique stacktraces
+
         uniqueStacktraces =
-            List.Extra.unique <| List.map .stackTrace sortedFailures
+            List.Extra.uniqueBy (\st -> String.split "\t" st |> List.tail |> toString) stacktraces
     in
     div []
         [ button [ onClick HideDetails ] [ text "<< Back to Summary" ]
@@ -250,15 +256,29 @@ failureDetailView ( cl, m ) groupedFailures =
                 , td [] [ text <| toString <| List.length sortedFailures ]
                 ]
             , tr []
-                [ td [] [ strong [] [ text "Unique stack traces: " ] ]
+                [ td [] [ strong [] [ text "Unique stack traces (including ex. message): ", a [ href "#one" ] [ text "(1)" ] ] ]
+                , td [] [ text <| toString <| List.length uniqueStacktracesAndMessages ]
+                ]
+            , tr []
+                [ td [] [ strong [] [ text "Unique stack traces: ", a [ href "#two" ] [ text "(2)" ] ] ]
                 , td [] [ text <| toString <| List.length uniqueStacktraces ]
                 ]
             ]
-        , h3 [] [ text "Failures" ]
+        , h3 [] [ text "Failures " ]
         , div [] <| List.map viewFailure sortedFailures
-        , em [] [ text "Note that some of the job links might be dead, because archived jobs are deleted after some time" ]
-        , h3 [] [ text "Stack traces" ]
-        , div [] <| List.map (\st -> div [] [ textarea [ value st, cols 160, rows 10 ] [] ]) uniqueStacktraces
+        , h3 [] [ text "Unique Stack Traces" ]
+        , div [] <| List.map (\st -> div [] [ textarea [ value st, cols 160, rows 10 ] [] ]) uniqueStacktracesAndMessages
+        , detailsLegend
+        ]
+
+
+detailsLegend : Html Msg
+detailsLegend =
+    div []
+        [ hr [] []
+        , div [ Attr.id "one" ] [ text "(1) Total number unique stack traces including exception message (looking at both WHERE the failure occured AND the exception message)" ]
+        , div [ Attr.id "two" ] [ text "(2) Total number unique stack traces that are different disregarding exception message (just looking at WHERE the failure was, ignoring exception message)" ]
+        , div [ Attr.id "three" ] [ text "(3) Some of the job links might be dead, because archived jobs are deleted after some time" ]
         ]
 
 
