@@ -155,7 +155,16 @@ filterControls : Model -> Html Msg
 filterControls { failureCountFilter } =
     div []
         [ text "Show tests that failed "
-        , input [ type_ "number", maxlength 2, Attr.min "0", Attr.max "100", onInput ChangeFailureCountFilter, value (toString failureCountFilter) ] []
+        , input
+            [ type_ "number"
+            , maxlength 2
+            , Attr.min "0"
+            , Attr.max "100"
+            , onInput ChangeFailureCountFilter
+            , value (toString failureCountFilter)
+            , style [ ( "width", "50px" ) ]
+            ]
+            []
         , text " or more times"
         ]
 
@@ -181,13 +190,16 @@ summaryLegend =
         , div [] [ text "* Standard deviation of failure dates (in days)" ]
         , h2 [] [ text "When is test method considered to be failing randomly?" ]
         , div []
-            [ text "The following heuristic is used to highlight random failures. Test test is considered randomly failing if all of the following conditions hold (open to discussion!):"
+            [ text "The following heuristic is used to highlight random failures. A test is considered randomly failing if all of the following conditions hold (open to discussion!):"
             , ul []
                 [ li [] [ text "Failed 3 or more times" ]
                 , li [] [ text "Last failure ocurred no longer than 14 days ago" ]
                 , li [] [ text "Standard deviation of failure dates is 4 days or more" ]
                 ]
             ]
+        , h2 [] [ text "Got ideas about how to make this report more useful?" ]
+        , text "File an issue on "
+        , a [ href "https://github.com/jhrcek/random-failures/issues" ] [ text "project's page" ]
         ]
 
 
