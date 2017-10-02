@@ -1,12 +1,12 @@
-module Main exposing (..)
+module Main exposing (main)
 
 import Dict exposing (Dict)
 import Dict.Extra
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, a, button, div, h2, h3, hr, input, li, span, strong, table, td, text, textarea, tr, ul)
-import Html.Attributes as Attr exposing (cols, href, maxlength, rows, size, style, type_, value)
-import Html.Events exposing (onClick, onInput)
+import Html exposing (Html, a, button, div, h2, h3, hr, input, label, li, strong, table, td, text, textarea, tr, ul)
+import Html.Attributes as Attr exposing (cols, href, maxlength, rows, style, type_, value)
+import Html.Events exposing (onCheck, onClick, onInput)
 import Input
 import Json.Decode as Decode
 import List.Extra
@@ -52,6 +52,7 @@ initialModel =
     , tableState = Table.initialSort stdDevColumnName
     , showingDetails = Nothing
     , now = DateTime.epoch
+    , fqnEnabled = False
     }
 
 
@@ -82,6 +83,9 @@ updateHelp msg model =
         SetNow timestamp ->
             { model | now = DateTime.fromTimestamp timestamp }
 
+        ToggleFQN flag ->
+            { model | fqnEnabled = flag }
+
 
 type Msg
     = ChangeFailureCountFilter String
@@ -89,6 +93,7 @@ type Msg
     | ShowDetails ClassAndMethod
     | HideDetails
     | SetNow Time.Time
+    | ToggleFQN Bool
 
 
 type alias Model =
@@ -98,6 +103,7 @@ type alias Model =
     , tableState : Table.State
     , showingDetails : Maybe ClassAndMethod
     , now : DateTime
+    , fqnEnabled : Bool
     }
 
 
@@ -166,6 +172,12 @@ filterControls { failureCountFilter } =
             ]
             []
         , text " or more times"
+        , div []
+            [ label []
+                [ input [ type_ "checkbox", onCheck ToggleFQN ] []
+                , text "Show Fully Qualified Class Names"
+                ]
+            ]
         ]
 
 
@@ -178,7 +190,7 @@ failureSummaryTable model =
     in
     div []
         [ h3 [] [ text "Failures (grouped by Class and Test method)" ]
-        , Table.view (tableConfig model.now) model.tableState acceptedFailures
+        , Table.view (tableConfig model.now model.fqnEnabled) model.tableState acceptedFailures
         , summaryLegend
         ]
 
@@ -193,7 +205,7 @@ summaryLegend =
             [ text "The following heuristic is used to highlight random failures. A test is considered randomly failing if all of the following conditions hold (open to discussion!):"
             , ul []
                 [ li [] [ text "Failed 3 or more times" ]
-                , li [] [ text "Last failure ocurred no longer than 14 days ago" ]
+                , li [] [ text "Last failure ocurred no longer than 7 days ago" ]
                 , li [] [ text "Standard deviation of failure dates is 4 days or more" ]
                 ]
             ]
@@ -203,13 +215,19 @@ summaryLegend =
         ]
 
 
-tableConfig : DateTime -> Table.Config TableRecord Msg
-tableConfig now =
+tableConfig : DateTime -> Bool -> Table.Config TableRecord Msg
+tableConfig now fqnEnabled =
     Table.customConfig
         { toId = \( ( cl, _ ), _ ) -> cl
         , toMsg = SetTableState
         , columns =
-            [ Table.stringColumn "Class" (\( ( cl, _ ), _ ) -> fqnToSimpleClassName cl)
+            [ Table.stringColumn "Class"
+                (\( ( cl, _ ), _ ) ->
+                    if fqnEnabled then
+                        cl
+                    else
+                        fqnToSimpleClassName cl
+                )
             , Table.stringColumn "Method" (\( ( _, m ), _ ) -> m)
             , Table.intColumn "Failures" (\( ( _, _ ), fs ) -> List.length fs)
             , stdDevColumn
@@ -240,7 +258,7 @@ isProbablyRandom fs now =
         failureCount =
             List.length fs
     in
-    failureCount >= 3 && lastFailureDaysAgo < 14 && failureDatesStdDev > 5
+    failureCount >= 3 && lastFailureDaysAgo < 7 && failureDatesStdDev > 5
 
 
 stdDevColumn : Table.Column TableRecord Msg
@@ -303,7 +321,7 @@ failureDetailView ( cl, m ) groupedFailures dateRange =
         , table []
             [ tr []
                 [ td [] [ strong [] [ text "Class: " ] ]
-                , td [] [ text <| fqnToSimpleClassName cl ]
+                , td [] [ text cl ]
                 ]
             , tr []
                 [ td [] [ strong [] [ text "Method: " ] ]
@@ -391,7 +409,7 @@ getSortedFailuresOf classAndMethod =
 
 
 viewFailure : TestFailure -> Html Msg
-viewFailure { url, date, stackTrace } =
+viewFailure { url, date } =
     div []
         [ text <| "Failed on " ++ formatDateTime date ++ " in job "
         , a [ href url ] [ text <| String.dropLeft 65 <| String.dropRight 11 url ]
