@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -23,7 +24,7 @@ import org.openqa.selenium.chrome.ChromeDriver;
 public class ScrapeFailures {
 
     private static WebDriver driver;
-    private static Set<TestFailure> failures = new HashSet<>();
+    private static Set<TestFailure> allFailures = new HashSet<>();
     private static DateTimeFormatter DATE_TIME_PARSE_FORMAT = DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a");
 
     public static void main(String[] args) throws IOException {
@@ -44,7 +45,7 @@ public class ScrapeFailures {
             }
         });
 
-        saveFailuresToFile(failures);
+        saveFailuresToFile(allFailures);
 
         driver.close();
     }
@@ -77,6 +78,7 @@ public class ScrapeFailures {
     }
 
     private static void extractFailedTests(UnstableBuild unstableBuild, String inputJson) throws IOException {
+        List<TestFailure> failuresInBuild = new ArrayList<>();
         ObjectMapper mapper = new ObjectMapper();
         JsonNode root = mapper.readTree(inputJson);
         JsonNode suitesArray = root.path("suites");
@@ -90,7 +92,7 @@ public class ScrapeFailures {
                 // Possible status values seem to be : PASSED, SKIPPED, FAILED, REGRESSION, FIXED
                 if ("FAILED".equals(testStatus) || "REGRESSION".equals(testStatus)) {
                     LocalDateTime buildDateTime = LocalDateTime.parse(unstableBuild.getDate(), DATE_TIME_PARSE_FORMAT);
-                    failures.add(new TestFailure(unstableBuild.getUrl(),
+                    failuresInBuild.add(new TestFailure(unstableBuild.getUrl(),
                                     buildDateTime,
                                     test.path("className").asText(),
                                     test.path("name").asText(),
@@ -99,6 +101,12 @@ public class ScrapeFailures {
                     );
                 }
             }
+        }
+
+        if (failuresInBuild.size() > 100) {
+            System.out.printf("WARNING: too many failures (%d) in %s -> ignoring", failuresInBuild.size(), unstableBuild.getUrl());
+        } else {
+            allFailures.addAll(failuresInBuild);
         }
     }
 
