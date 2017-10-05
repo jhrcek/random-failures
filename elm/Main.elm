@@ -4,7 +4,7 @@ import Dict exposing (Dict)
 import Dict.Extra
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, a, button, div, h2, h3, hr, input, label, li, strong, table, td, text, textarea, tr, ul)
+import Html exposing (Html, a, button, div, h2, h3, hr, input, label, li, strong, table, td, text, textarea, th, tr, ul)
 import Html.Attributes as Attr exposing (cols, href, maxlength, rows, style, type_, value)
 import Html.Events exposing (onCheck, onClick, onInput)
 import Input
@@ -343,7 +343,7 @@ failureDetailView ( cl, m ) groupedFailures dateRange =
         , h3 [] [ text "Spread of failure dates" ]
         , viewFailureDatesChart dateRange failureTimestamps
         , h3 [] [ text "Failures ", a [ href "#three" ] [ text "(3)" ] ]
-        , div [] <| List.map viewFailure sortedFailures
+        , failuresTable sortedFailures
         , h3 [] [ text "Unique Stack Traces" ]
         , div [] <| List.map (\st -> div [] [ textarea [ value st, cols 160, rows <| getRowsToDisplay st ] [] ]) uniqueStacktracesAndMessages
         , detailsLegend
@@ -408,11 +408,24 @@ getSortedFailuresOf classAndMethod =
     Maybe.withDefault [] << Dict.get classAndMethod
 
 
-viewFailure : TestFailure -> Html Msg
-viewFailure { url, date } =
-    div []
-        [ text <| "Failed on " ++ formatDateTime date ++ " in job "
-        , a [ href url ] [ text <| String.dropLeft 65 <| String.dropRight 11 url ]
+failuresTable : List TestFailure -> Html Msg
+failuresTable failures =
+    table [] <|
+        [ tr []
+            [ th [] [ text "Failed on" ]
+            , th [] [ text "Build URL" ]
+            , th [] [ text "Action" ]
+            ]
+        ]
+            ++ List.map failureRow failures
+
+
+failureRow : TestFailure -> Html Msg
+failureRow { url, date } =
+    tr []
+        [ td [] [ text <| formatDateTime date ]
+        , td [] [ a [ href url ] [ text <| String.dropLeft 65 <| String.dropRight 11 url ] ]
+        , td [] [ button [] [ text "Higlight Stactrace" ] ]
         ]
 
 
