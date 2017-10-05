@@ -205,7 +205,7 @@ summaryLegend =
             [ text "The following heuristic is used to highlight random failures. A test is considered randomly failing if all of the following conditions hold (open to discussion!):"
             , ul []
                 [ li [] [ text "Failed 3 or more times" ]
-                , li [] [ text "Last failure ocurred no longer than 7 days ago" ]
+                , li [] [ text "Last failure ocurred no longer than 14 days ago" ]
                 , li [] [ text "Standard deviation of failure dates is 4 days or more" ]
                 ]
             ]
@@ -258,7 +258,7 @@ isProbablyRandom fs now =
         failureCount =
             List.length fs
     in
-    failureCount >= 3 && lastFailureDaysAgo < 7 && failureDatesStdDev > 5
+    failureCount >= 3 && lastFailureDaysAgo < 14 && failureDatesStdDev > 5
 
 
 stdDevColumn : Table.Column TableRecord Msg
