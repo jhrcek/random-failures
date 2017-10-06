@@ -50,7 +50,7 @@ initialModel =
     , failureCountFilter = 3
     , dateRangeFilter = ( oldestDate, newestDate )
     , tableState = Table.initialSort stdDevColumnName
-    , showingDetails = Nothing
+    , viewMode = Summary
     , now = DateTime.epoch
     , fqnEnabled = False
     }
@@ -75,16 +75,24 @@ updateHelp msg model =
             { model | tableState = newState }
 
         ShowDetails classAndMethod ->
-            { model | showingDetails = Just classAndMethod }
+            { model | viewMode = MethodDetails classAndMethod Nothing }
 
         HideDetails ->
-            { model | showingDetails = Nothing }
+            { model | viewMode = Summary }
 
         SetNow timestamp ->
             { model | now = DateTime.fromTimestamp timestamp }
 
         ToggleFQN flag ->
             { model | fqnEnabled = flag }
+
+        ToggleStacktrace st ->
+            case model.viewMode of
+                MethodDetails classAndMethod _ ->
+                    { model | viewMode = MethodDetails classAndMethod (Just st) }
+
+                _ ->
+                    model
 
 
 type Msg
@@ -94,6 +102,7 @@ type Msg
     | HideDetails
     | SetNow Time.Time
     | ToggleFQN Bool
+    | ToggleStacktrace String
 
 
 type alias Model =
@@ -101,7 +110,7 @@ type alias Model =
     , failureCountFilter : Int
     , dateRangeFilter : ( DateTime, DateTime )
     , tableState : Table.State
-    , showingDetails : Maybe ClassAndMethod
+    , viewMode : ViewMode
     , now : DateTime
     , fqnEnabled : Bool
     }
@@ -114,6 +123,11 @@ type alias TestFailure =
     , testMethod : String
     , stackTrace : String
     }
+
+
+type ViewMode
+    = Summary
+    | MethodDetails ClassAndMethod (Maybe String)
 
 
 type alias GroupedFailures =
@@ -130,12 +144,12 @@ type alias ClassAndMethod =
 
 view : Model -> Html Msg
 view model =
-    case model.showingDetails of
-        Nothing ->
+    case model.viewMode of
+        Summary ->
             mainPage model
 
-        Just classAndMethod ->
-            failureDetailView classAndMethod model.groupedFailures model.dateRangeFilter
+        MethodDetails classAndMethod mSt ->
+            failureDetailView classAndMethod model.groupedFailures model.dateRangeFilter mSt
 
 
 mainPage : Model -> Html Msg
@@ -294,9 +308,10 @@ detailsColumn =
         }
 
 
-failureDetailView : ClassAndMethod -> GroupedFailures -> ( DateTime, DateTime ) -> Html Msg
-failureDetailView ( cl, m ) groupedFailures dateRange =
+failureDetailView : ClassAndMethod -> GroupedFailures -> ( DateTime, DateTime ) -> Maybe String -> Html Msg
+failureDetailView ( cl, m ) groupedFailures dateRange mStackTrace =
     let
+        sortedFailures : List TestFailure
         sortedFailures =
             getSortedFailuresOf ( cl, m ) groupedFailures
 
@@ -312,8 +327,21 @@ failureDetailView ( cl, m ) groupedFailures dateRange =
         uniqueStacktraces =
             List.Extra.uniqueBy (\st -> String.split "\t" st |> List.tail |> toString) stacktraces
 
-        getRowsToDisplay stacktrace =
-            min 10 (1 + List.length (String.lines stacktrace))
+        stacktraceView mStacktrace =
+            case mStackTrace of
+                Nothing ->
+                    text ""
+
+                Just st ->
+                    div []
+                        [ h3 [] [ text "Stack Trace" ]
+                        , textarea
+                            [ value st
+                            , cols 160
+                            , rows <| 1 + List.length (String.lines st)
+                            ]
+                            []
+                        ]
     in
     div []
         [ button [ onClick HideDetails ] [ text "<< Back to Summary" ]
@@ -344,8 +372,7 @@ failureDetailView ( cl, m ) groupedFailures dateRange =
         , viewFailureDatesChart dateRange failureTimestamps
         , h3 [] [ text "Failures ", a [ href "#three" ] [ text "(3)" ] ]
         , failuresTable sortedFailures
-        , h3 [] [ text "Unique Stack Traces" ]
-        , div [] <| List.map (\st -> div [] [ textarea [ value st, cols 160, rows <| getRowsToDisplay st ] [] ]) uniqueStacktracesAndMessages
+        , stacktraceView mStackTrace
         , detailsLegend
         ]
 
@@ -421,11 +448,11 @@ failuresTable failures =
 
 
 failureRow : TestFailure -> Html Msg
-failureRow { url, date } =
+failureRow { url, date, stackTrace } =
     tr []
         [ td [] [ text <| formatDateTime date ]
         , td [] [ a [ href url ] [ text <| String.dropLeft 65 <| String.dropRight 11 url ] ]
-        , td [] [ button [] [ text "Higlight Stactrace" ] ]
+        , td [] [ button [ onClick (ToggleStacktrace stackTrace) ] [ text "Show Stack Trace" ] ]
         ]
 
 
