@@ -1,5 +1,7 @@
 module Main exposing (main)
 
+import Color exposing (..)
+import Color.Convert
 import Dict exposing (Dict)
 import Dict.Extra
 import FormatNumber
@@ -315,9 +317,6 @@ detailsColumn =
 failureDetailView : ClassAndMethod -> List TestFailure -> ( DateTime, DateTime ) -> Maybe String -> Html Msg
 failureDetailView ( cl, m ) sortedFailures dateRange mStackTrace =
     let
-        failureTimestamps =
-            List.map (DateTime.toTimestamp << .date) sortedFailures
-
         stacktraces =
             List.map .stackTrace sortedFailures
 
@@ -329,17 +328,42 @@ failureDetailView ( cl, m ) sortedFailures dateRange mStackTrace =
 
         maybeStacktraceView =
             Maybe.withDefault (text "") <| Maybe.map stacktraceView mStackTrace
+
+        colorizedFailures =
+            assignColorsToStacktraces sortedFailures
     in
     div []
         [ button [ onClick HideDetails ] [ text "<< Back to Summary" ]
         , h2 [] [ text "Failure details" ]
         , failureDetailsSummary cl m (List.length sortedFailures) (List.length uniqueStacktracesAndMessages) (List.length uniqueStacktraces)
         , h3 [] [ text "Spread of failure dates" ]
-        , viewFailureDatesChart dateRange failureTimestamps
+        , viewFailureDatesChart dateRange colorizedFailures
         , h3 [] [ text "Failures", helpIcon "Some of the job links might be dead, because archived jobs are deleted after some time" ]
-        , failuresTable sortedFailures
+        , failuresTable colorizedFailures
         , maybeStacktraceView
         ]
+
+
+assignColorsToStacktraces : List TestFailure -> List ( TestFailure, Color )
+assignColorsToStacktraces failures =
+    let
+        stacktraceToColor : Dict String Color
+        stacktraceToColor =
+            List.map .stackTrace failures
+                |> List.Extra.unique
+                |> (\uniqueStacktraces -> List.map2 (\st color -> ( st, color )) uniqueStacktraces stacktraceColors)
+                |> Dict.fromList
+
+        assignColor : TestFailure -> Color
+        assignColor f =
+            Dict.get f.stackTrace stacktraceToColor |> Maybe.withDefault white
+    in
+    List.map (\f -> ( f, assignColor f )) failures
+
+
+stacktraceColors : List Color
+stacktraceColors =
+    [ lightRed, lightOrange, lightYellow, lightGreen, lightBlue, lightPurple, lightBrown, darkRed, darkOrange, darkYellow, darkGreen, darkBlue, darkPurple, darkBrown, red, orange, yellow, green, blue, purple, brown, grey, darkGrey, lightCharcoal, charcoal, darkCharcoal ]
 
 
 failureDetailsSummary : String -> String -> Int -> Int -> Int -> Html Msg
@@ -383,11 +407,22 @@ stacktraceView stackTrace =
 
 helpIcon : String -> Html a
 helpIcon helpText =
-    img [ src "images/q.png", title helpText, style [ ( "width", "15px" ), ( "height", "15px" ), ( "margin-left", "4px" ), ( "margin-right", "4px" ), ( "margin-bottom", "-2px" ) ] ] []
+    img
+        [ src "images/q.png"
+        , title helpText
+        , style
+            [ ( "width", "15px" )
+            , ( "height", "15px" )
+            , ( "margin-left", "4px" )
+            , ( "margin-right", "4px" )
+            , ( "margin-bottom", "-2px" )
+            ]
+        ]
+        []
 
 
-viewFailureDatesChart : ( DateTime, DateTime ) -> List Float -> Html a
-viewFailureDatesChart ( fromDate, toDate ) timestamps =
+viewFailureDatesChart : ( DateTime, DateTime ) -> List ( TestFailure, Color ) -> Html a
+viewFailureDatesChart ( fromDate, toDate ) colorizedFailures =
     let
         leastTimestamp =
             DateTime.toTimestamp fromDate
@@ -403,28 +438,29 @@ viewFailureDatesChart ( fromDate, toDate ) timestamps =
             100 * (t - leastTimestamp) / timestampRange
     in
     List.map
-        (\t ->
+        (\( failure, color ) ->
             div
                 [ style
                     [ ( "width", "10px" )
                     , ( "height", "10px" )
                     , ( "border-radius", "5px" )
                     , ( "position", "absolute" )
-                    , ( "background-color", "red" )
-                    , ( "left", toString (relativePosition t) ++ "%" )
+                    , ( "background-color", Color.Convert.colorToHex color )
+                    , ( "left", toString (relativePosition (DateTime.toTimestamp failure.date)) ++ "%" )
                     , ( "transform", "rotate(-45deg)" )
                     , ( "white-space", "pre" )
                     ]
                 ]
-                [ text <| "   " ++ formatDateTime (DateTime.fromTimestamp t) ]
+                [ text <| "   " ++ formatDateTime failure.date ]
         )
-        timestamps
+        colorizedFailures
         |> div
             [ style
                 [ ( "background-color", "lightgray" )
                 , ( "position", "relative" )
                 , ( "height", "10px" )
                 , ( "margin-top", "80px" )
+                , ( "width", "95%" )
                 ]
             ]
 
@@ -434,23 +470,25 @@ getSortedFailuresOf classAndMethod =
     Maybe.withDefault [] << Dict.get classAndMethod
 
 
-failuresTable : List TestFailure -> Html Msg
-failuresTable failures =
+failuresTable : List ( TestFailure, Color ) -> Html Msg
+failuresTable colorizedFailures =
     table [] <|
         [ tr []
             [ th [] [ text "Failed on" ]
             , th [] [ text "Build URL" ]
+            , th [] [ text "Unique Stack Trace" ]
             , th [] [ text "Action" ]
             ]
         ]
-            ++ List.map failureRow failures
+            ++ List.map failureRow colorizedFailures
 
 
-failureRow : TestFailure -> Html Msg
-failureRow { url, date, stackTrace } =
+failureRow : ( TestFailure, Color ) -> Html Msg
+failureRow ( { url, date, stackTrace }, color ) =
     tr []
         [ td [] [ text <| formatDateTime date ]
         , td [] [ a [ href url ] [ text <| String.dropLeft 65 <| String.dropRight 11 url ] ]
+        , td [ style [ ( "background-color", Color.Convert.colorToHex color ) ] ] []
         , td [] [ button [ onClick (ToggleStacktrace stackTrace) ] [ text "Show Stack Trace" ] ]
         ]
 
