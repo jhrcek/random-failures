@@ -6,9 +6,9 @@ import Dict exposing (Dict)
 import Dict.Extra
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, a, button, div, h2, h3, hr, img, input, label, li, strong, table, td, text, textarea, th, tr, ul)
-import Html.Attributes as Attr exposing (cols, href, maxlength, rows, src, style, title, type_, value)
-import Html.Events exposing (onCheck, onClick, onInput)
+import Html exposing (Html, a, button, div, h2, h3, hr, img, input, li, strong, table, td, text, textarea, th, tr, ul)
+import Html.Attributes as Attr exposing (checked, cols, href, maxlength, name, rows, src, style, title, type_, value)
+import Html.Events exposing (onClick, onInput)
 import Input
 import Json.Decode as Decode
 import List.Extra
@@ -178,7 +178,7 @@ description ( fromDate, toDate ) =
 
 
 filterControls : Model -> Html Msg
-filterControls { failureCountFilter } =
+filterControls { failureCountFilter, fqnEnabled } =
     div []
         [ text "Show tests that failed "
         , input
@@ -193,10 +193,11 @@ filterControls { failureCountFilter } =
             []
         , text " or more times"
         , div []
-            [ label []
-                [ input [ type_ "checkbox", onCheck ToggleFQN ] []
-                , text "Show Fully Qualified Class Names"
-                ]
+            [ text "Class Names"
+            , input [ type_ "radio", name "fqn", checked (not fqnEnabled), onClick (ToggleFQN False) ] []
+            , text "Simple"
+            , input [ type_ "radio", name "fqn", checked fqnEnabled, onClick (ToggleFQN True) ] []
+            , text "Fully Qualified"
             ]
         ]
 
@@ -382,11 +383,17 @@ failureDetailsSummary className methodName totalFailures uniqueStacktracesAndMes
             , td [] [ text <| toString totalFailures ]
             ]
         , tr []
-            [ td [] [ strong [] [ text "Unique stack traces (including ex. message)" ], helpIcon "Total number unique stack traces including exception message (looking at both WHERE the failure occured AND the exception message)" ]
+            [ td []
+                [ strong [] [ text "Unique stack traces (including ex. message)" ]
+                , helpIcon "Total number unique stack traces including exception message (looking at both WHERE the failure occured AND the exception message)"
+                ]
             , td [] [ text <| toString uniqueStacktracesAndMessagesCount ]
             ]
         , tr []
-            [ td [] [ strong [] [ text "Unique stack traces" ], helpIcon "Total number unique stack traces that are different disregarding exception message (just looking at WHERE the failure was, ignoring exception message)" ]
+            [ td []
+                [ strong [] [ text "Unique stack traces" ]
+                , helpIcon "Total number unique stack traces that are different disregarding exception message (just looking at WHERE the failure was, ignoring exception message)"
+                ]
             , td [] [ text <| toString uniqueStacktracesCount ]
             ]
         ]
