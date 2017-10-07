@@ -4,8 +4,8 @@ import Dict exposing (Dict)
 import Dict.Extra
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, a, button, div, h2, h3, hr, input, label, li, strong, table, td, text, textarea, th, tr, ul)
-import Html.Attributes as Attr exposing (cols, href, maxlength, rows, style, type_, value)
+import Html exposing (Html, a, button, div, h2, h3, hr, img, input, label, li, strong, table, td, text, textarea, th, tr, ul)
+import Html.Attributes as Attr exposing (cols, href, maxlength, rows, src, style, title, type_, value)
 import Html.Events exposing (onCheck, onClick, onInput)
 import Input
 import Json.Decode as Decode
@@ -149,7 +149,11 @@ view model =
             mainPage model
 
         MethodDetails classAndMethod mSt ->
-            failureDetailView classAndMethod model.groupedFailures model.dateRangeFilter mSt
+            let
+                failures =
+                    getSortedFailuresOf classAndMethod model.groupedFailures
+            in
+            failureDetailView classAndMethod failures model.dateRangeFilter mSt
 
 
 mainPage : Model -> Html Msg
@@ -308,13 +312,9 @@ detailsColumn =
         }
 
 
-failureDetailView : ClassAndMethod -> GroupedFailures -> ( DateTime, DateTime ) -> Maybe String -> Html Msg
-failureDetailView ( cl, m ) groupedFailures dateRange mStackTrace =
+failureDetailView : ClassAndMethod -> List TestFailure -> ( DateTime, DateTime ) -> Maybe String -> Html Msg
+failureDetailView ( cl, m ) sortedFailures dateRange mStackTrace =
     let
-        sortedFailures : List TestFailure
-        sortedFailures =
-            getSortedFailuresOf ( cl, m ) groupedFailures
-
         failureTimestamps =
             List.map (DateTime.toTimestamp << .date) sortedFailures
 
@@ -327,64 +327,63 @@ failureDetailView ( cl, m ) groupedFailures dateRange mStackTrace =
         uniqueStacktraces =
             List.Extra.uniqueBy (\st -> String.split "\t" st |> List.tail |> toString) stacktraces
 
-        stacktraceView mStacktrace =
-            case mStackTrace of
-                Nothing ->
-                    text ""
-
-                Just st ->
-                    div []
-                        [ h3 [] [ text "Stack Trace" ]
-                        , textarea
-                            [ value st
-                            , cols 160
-                            , rows <| 1 + List.length (String.lines st)
-                            ]
-                            []
-                        ]
+        maybeStacktraceView =
+            Maybe.withDefault (text "") <| Maybe.map stacktraceView mStackTrace
     in
     div []
         [ button [ onClick HideDetails ] [ text "<< Back to Summary" ]
-        , h2 [] [ text " Failure details" ]
-        , table []
-            [ tr []
-                [ td [] [ strong [] [ text "Class: " ] ]
-                , td [] [ text cl ]
-                ]
-            , tr []
-                [ td [] [ strong [] [ text "Method: " ] ]
-                , td [] [ text m ]
-                ]
-            , tr []
-                [ td [] [ strong [] [ text "Total failures: " ] ]
-                , td [] [ text <| toString <| List.length sortedFailures ]
-                ]
-            , tr []
-                [ td [] [ strong [] [ text "Unique stack traces (including ex. message): ", a [ href "#one" ] [ text "(1)" ] ] ]
-                , td [] [ text <| toString <| List.length uniqueStacktracesAndMessages ]
-                ]
-            , tr []
-                [ td [] [ strong [] [ text "Unique stack traces: ", a [ href "#two" ] [ text "(2)" ] ] ]
-                , td [] [ text <| toString <| List.length uniqueStacktraces ]
-                ]
-            ]
+        , h2 [] [ text "Failure details" ]
+        , failureDetailsSummary cl m (List.length sortedFailures) (List.length uniqueStacktracesAndMessages) (List.length uniqueStacktraces)
         , h3 [] [ text "Spread of failure dates" ]
         , viewFailureDatesChart dateRange failureTimestamps
-        , h3 [] [ text "Failures ", a [ href "#three" ] [ text "(3)" ] ]
+        , h3 [] [ text "Failures", helpIcon "Some of the job links might be dead, because archived jobs are deleted after some time" ]
         , failuresTable sortedFailures
-        , stacktraceView mStackTrace
-        , detailsLegend
+        , maybeStacktraceView
         ]
 
 
-detailsLegend : Html Msg
-detailsLegend =
+failureDetailsSummary : String -> String -> Int -> Int -> Int -> Html Msg
+failureDetailsSummary className methodName totalFailures uniqueStacktracesAndMessagesCount uniqueStacktracesCount =
+    table []
+        [ tr []
+            [ td [] [ strong [] [ text "Class" ] ]
+            , td [] [ text className ]
+            ]
+        , tr []
+            [ td [] [ strong [] [ text "Method" ] ]
+            , td [] [ text methodName ]
+            ]
+        , tr []
+            [ td [] [ strong [] [ text "Total failures" ] ]
+            , td [] [ text <| toString totalFailures ]
+            ]
+        , tr []
+            [ td [] [ strong [] [ text "Unique stack traces (including ex. message)" ], helpIcon "Total number unique stack traces including exception message (looking at both WHERE the failure occured AND the exception message)" ]
+            , td [] [ text <| toString uniqueStacktracesAndMessagesCount ]
+            ]
+        , tr []
+            [ td [] [ strong [] [ text "Unique stack traces" ], helpIcon "Total number unique stack traces that are different disregarding exception message (just looking at WHERE the failure was, ignoring exception message)" ]
+            , td [] [ text <| toString uniqueStacktracesCount ]
+            ]
+        ]
+
+
+stacktraceView : String -> Html Msg
+stacktraceView stackTrace =
     div []
-        [ hr [] []
-        , div [ Attr.id "one" ] [ text "(1) Total number unique stack traces including exception message (looking at both WHERE the failure occured AND the exception message)" ]
-        , div [ Attr.id "two" ] [ text "(2) Total number unique stack traces that are different disregarding exception message (just looking at WHERE the failure was, ignoring exception message)" ]
-        , div [ Attr.id "three" ] [ text "(3) Some of the job links might be dead, because archived jobs are deleted after some time" ]
+        [ h3 [] [ text "Stack Trace" ]
+        , textarea
+            [ value stackTrace
+            , cols 160
+            , rows <| 1 + List.length (String.lines stackTrace)
+            ]
+            []
         ]
+
+
+helpIcon : String -> Html a
+helpIcon helpText =
+    img [ src "images/q.png", title helpText, style [ ( "width", "15px" ), ( "height", "15px" ), ( "margin-left", "4px" ), ( "margin-right", "4px" ), ( "margin-bottom", "-2px" ) ] ] []
 
 
 viewFailureDatesChart : ( DateTime, DateTime ) -> List Float -> Html a
