@@ -339,7 +339,7 @@ failureDetailView ( cl, m ) sortedFailures dateRange mStackTrace =
         , failureDetailsSummary cl m (List.length sortedFailures) (List.length uniqueStacktracesAndMessages) (List.length uniqueStacktraces)
         , h3 [] [ text "Spread of failure dates" ]
         , viewFailureDatesChart dateRange colorizedFailures
-        , h3 [] [ text "Failures", helpIcon "Some of the job links might be dead, because archived jobs are deleted after some time" ]
+        , h3 [] [ text "Failures" ]
         , failuresTable colorizedFailures
         , maybeStacktraceView
         ]
@@ -482,7 +482,7 @@ failuresTable colorizedFailures =
     table [] <|
         [ tr []
             [ th [] [ text "Failed on" ]
-            , th [] [ text "Build URL" ]
+            , th [] [ text "Build URL", helpIcon "Some of the job links might be dead, because archived jobs are deleted after some time" ]
             , th [] [ text "Unique Stack Trace" ]
             , th [] [ text "Action" ]
             ]
