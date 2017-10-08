@@ -49,7 +49,7 @@ initialModel =
             DateTime.fromTimestamp <| Maybe.withDefault 0 <| List.maximum sortedFailureTimestamps
     in
     { groupedFailures = groupFailuresByClassAndMethod failures
-    , failureCountFilter = 3
+    , failureCountFilter = 5
     , dateRangeFilter = ( oldestDate, newestDate )
     , tableState = Table.initialSort stdDevColumnName
     , viewMode = Summary
@@ -225,9 +225,9 @@ summaryLegend =
         , div []
             [ text "The following heuristic is used to highlight random failures. A test is considered randomly failing if all of the following conditions hold (open to discussion!):"
             , ul []
-                [ li [] [ text "Failed 3 or more times" ]
+                [ li [] [ text "Failed 5 or more times" ]
                 , li [] [ text "Last failure ocurred no longer than 14 days ago" ]
-                , li [] [ text "Standard deviation of failure dates is 4 days or more" ]
+                , li [] [ text "Standard deviation of failure dates is greater than 5 days" ]
                 ]
             ]
         , h2 [] [ text "Got ideas about how to make this report more useful?" ]
@@ -279,7 +279,7 @@ isProbablyRandom fs now =
         failureCount =
             List.length fs
     in
-    failureCount >= 3 && lastFailureDaysAgo < 14 && failureDatesStdDev > 5
+    failureCount >= 5 && lastFailureDaysAgo < 14 && failureDatesStdDev > 5
 
 
 stdDevColumn : Table.Column TableRecord Msg
