@@ -65,6 +65,7 @@ public class ScrapeFailures {
                 .map(unstableBuild -> {
                     WebElement buildLink = unstableBuild.findElement(By.cssSelector("div[time]>a.build-link"));
                     String url = buildLink.getAttribute("href") + "testReport/";
+                    System.out.println("Unstable build: " + url);
                     String date = buildLink.getText();
                     return new UnstableBuild(url, date);
                 });
@@ -104,7 +105,7 @@ public class ScrapeFailures {
         }
 
         if (failuresInBuild.size() > 100) {
-            System.out.printf("WARNING: too many failures (%d) in %s -> ignoring", failuresInBuild.size(), unstableBuild.getUrl());
+            System.out.printf("WARNING: too many failures (%d) in %s -> ignoring%n", failuresInBuild.size(), unstableBuild.getUrl());
         } else {
             allFailures.addAll(failuresInBuild);
         }
