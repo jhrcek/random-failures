@@ -43,11 +43,16 @@ public class MergeFailures {
             throw new IllegalArgumentException("reportsDir must be existing directory");
         }
 
-        return reportsDir.listFiles((dir, name) -> name.startsWith("results") && name.endsWith(".txt"));
+        File[] reports = reportsDir.listFiles((dir, name) -> name.startsWith("results") && name.endsWith(".txt"));
+        if (reports == null) {
+            throw new IllegalStateException("No reports found in " + reportsDir);
+        }
+        Arrays.sort(reports); //Sort by failure date thanks to filename format resultsYYYY-MM-DD.txt
+        return reports;
     }
 
-    /* Write as escaped javascript to be used as hardcoded valu to be embedded into elm source. */
-    static void embedFailuresItoElmSource(Set<TestFailure> failures, File outputFile) throws IOException {
+    /* Write as escaped javascript to be used as hardcoded value to be embedded into elm source. */
+    private static void embedFailuresItoElmSource(Set<TestFailure> failures, File outputFile) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         String elmSourceFilePrefix = "module Input exposing (failureDataJsonString)\n" +

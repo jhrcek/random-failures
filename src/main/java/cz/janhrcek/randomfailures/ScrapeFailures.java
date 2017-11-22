@@ -1,7 +1,5 @@
 package cz.janhrcek.randomfailures;
 
-import static java.util.stream.Collectors.toList;
-
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDate;
@@ -20,6 +18,8 @@ import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
+
+import static java.util.stream.Collectors.toList;
 
 public class ScrapeFailures {
 
@@ -104,8 +104,8 @@ public class ScrapeFailures {
             }
         }
 
-        if (failuresInBuild.size() > 100) {
-            System.out.printf("WARNING: too many failures (%d) in %s -> ignoring%n", failuresInBuild.size(), unstableBuild.getUrl());
+        if (failuresInBuild.size() > 50) {
+            System.out.printf("WARNING: ignoring build with more than 50 failures (%d) in %s%n", failuresInBuild.size(), unstableBuild.getUrl());
         } else {
             allFailures.addAll(failuresInBuild);
         }
