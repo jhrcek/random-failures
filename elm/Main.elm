@@ -1,6 +1,6 @@
 module Main exposing (main)
 
-import Color exposing (..)
+import Color exposing (Color)
 import Color.Convert
 import Dict exposing (Dict)
 import Dict.Extra
@@ -223,7 +223,9 @@ summaryLegend =
         , div [] [ text "* Standard deviation of failure dates (in days)" ]
         , h2 [] [ text "When is test method considered to be failing randomly?" ]
         , div []
-            [ text "The following heuristic is used to highlight random failures. A test is considered randomly failing if all of the following conditions hold (open to discussion!):"
+            [ text <|
+                "The following heuristic is used to highlight random failures. "
+                    ++ "A test is considered randomly failing if all of the following conditions hold (open to discussion!):"
             , ul []
                 [ li [] [ text "Failed 5 or more times" ]
                 , li [] [ text "Last failure ocurred no longer than 14 days ago" ]
@@ -357,14 +359,40 @@ assignColorsToStacktraces failures =
 
         assignColor : TestFailure -> Color
         assignColor f =
-            Dict.get f.stackTrace stacktraceToColor |> Maybe.withDefault white
+            Dict.get f.stackTrace stacktraceToColor |> Maybe.withDefault Color.white
     in
     List.map (\f -> ( f, assignColor f )) failures
 
 
 stacktraceColors : List Color
 stacktraceColors =
-    [ lightRed, lightOrange, lightYellow, lightGreen, lightBlue, lightPurple, lightBrown, darkRed, darkOrange, darkYellow, darkGreen, darkBlue, darkPurple, darkBrown, red, orange, yellow, green, blue, purple, brown, grey, darkGrey, lightCharcoal, charcoal, darkCharcoal ]
+    [ Color.lightRed
+    , Color.lightOrange
+    , Color.lightYellow
+    , Color.lightGreen
+    , Color.lightBlue
+    , Color.lightPurple
+    , Color.lightBrown
+    , Color.darkRed
+    , Color.darkOrange
+    , Color.darkYellow
+    , Color.darkGreen
+    , Color.darkBlue
+    , Color.darkPurple
+    , Color.darkBrown
+    , Color.red
+    , Color.orange
+    , Color.yellow
+    , Color.green
+    , Color.blue
+    , Color.purple
+    , Color.brown
+    , Color.grey
+    , Color.darkGrey
+    , Color.lightCharcoal
+    , Color.charcoal
+    , Color.darkCharcoal
+    ]
 
 
 failureDetailsSummary : String -> String -> Int -> Int -> Int -> Html Msg
@@ -385,14 +413,18 @@ failureDetailsSummary className methodName totalFailures uniqueStacktracesAndMes
         , tr []
             [ td []
                 [ strong [] [ text "Unique stack traces (including ex. message)" ]
-                , helpIcon "Total number unique stack traces including exception message (looking at both WHERE the failure occured AND the exception message)"
+                , helpIcon <|
+                    "Total number unique stack traces including exception message "
+                        ++ "(looking at both WHERE the failure occured AND the exception message)"
                 ]
             , td [] [ text <| toString uniqueStacktracesAndMessagesCount ]
             ]
         , tr []
             [ td []
                 [ strong [] [ text "Unique stack traces" ]
-                , helpIcon "Total number unique stack traces that are different disregarding exception message (just looking at WHERE the failure was, ignoring exception message)"
+                , helpIcon <|
+                    "Total number unique stack traces that are different disregarding exception message "
+                        ++ "(just looking at WHERE the failure was, ignoring exception message)"
                 ]
             , td [] [ text <| toString uniqueStacktracesCount ]
             ]
