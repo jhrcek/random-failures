@@ -12,6 +12,8 @@ import Html.Events exposing (onClick, onInput)
 import Input
 import Json.Decode as Decode
 import List.Extra
+import Navigation
+import Page exposing (ClassAndMethod, Page)
 import Table exposing (defaultCustomizations)
 import Task
 import Time
@@ -20,7 +22,7 @@ import Time.DateTime as DateTime exposing (DateTime, zero)
 
 main : Program Never Model Msg
 main =
-    Html.program
+    Navigation.program UrlChange
         { init = init
         , view = view
         , update = update
@@ -28,13 +30,22 @@ main =
         }
 
 
-init : ( Model, Cmd Msg )
-init =
-    ( initialModel, Task.perform SetNow Time.now )
+init : Navigation.Location -> ( Model, Cmd Msg )
+init location =
+    let
+        initialPage =
+            Page.parse location
+    in
+    ( initialModel initialPage
+    , Cmd.batch
+        [ Task.perform SetNow Time.now
+        , updateUrl initialPage
+        ]
+    )
 
 
-initialModel : Model
-initialModel =
+initialModel : Page -> Model
+initialModel initialPage =
     let
         failures =
             parseFailuresJson Input.failureDataJsonString
@@ -52,7 +63,7 @@ initialModel =
     , failureCountFilter = 5
     , dateRangeFilter = ( oldestDate, newestDate )
     , tableState = Table.initialSort stdDevColumnName
-    , viewMode = Summary
+    , page = initialPage
     , now = DateTime.epoch
     , fqnEnabled = False
     }
@@ -60,51 +71,58 @@ initialModel =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    ( updateHelp msg model, Cmd.none )
-
-
-updateHelp : Msg -> Model -> Model
-updateHelp msg model =
     case msg of
         ChangeFailureCountFilter str ->
             let
                 newFailureCountFilter =
                     String.toInt str |> Result.withDefault 1
             in
-            { model | failureCountFilter = newFailureCountFilter }
+            { model | failureCountFilter = newFailureCountFilter } ! []
 
         SetTableState newState ->
-            { model | tableState = newState }
+            { model | tableState = newState } ! []
 
-        ShowDetails classAndMethod ->
-            { model | viewMode = MethodDetails classAndMethod Nothing }
+        GoToDetails classAndMethod ->
+            let
+                newPage =
+                    Page.MethodDetails classAndMethod Nothing
+            in
+            ( { model | page = newPage }
+            , updateUrl newPage
+            )
 
-        HideDetails ->
-            { model | viewMode = Summary }
+        GoToSummary ->
+            ( { model | page = Page.Summary }
+            , updateUrl Page.Summary
+            )
 
         SetNow timestamp ->
-            { model | now = DateTime.fromTimestamp timestamp }
+            { model | now = DateTime.fromTimestamp timestamp } ! []
 
         ToggleFQN flag ->
-            { model | fqnEnabled = flag }
+            { model | fqnEnabled = flag } ! []
 
         ToggleStacktrace st ->
-            case model.viewMode of
-                MethodDetails classAndMethod _ ->
-                    { model | viewMode = MethodDetails classAndMethod (Just st) }
+            case model.page of
+                Page.MethodDetails classAndMethod _ ->
+                    { model | page = Page.MethodDetails classAndMethod (Just st) } ! []
 
                 _ ->
-                    model
+                    model ! []
+
+        UrlChange location ->
+            { model | page = Page.parse location } ! []
 
 
 type Msg
     = ChangeFailureCountFilter String
     | SetTableState Table.State
-    | ShowDetails ClassAndMethod
-    | HideDetails
+    | GoToDetails ClassAndMethod
+    | GoToSummary
     | SetNow Time.Time
     | ToggleFQN Bool
     | ToggleStacktrace String
+    | UrlChange Navigation.Location
 
 
 type alias Model =
@@ -112,7 +130,7 @@ type alias Model =
     , failureCountFilter : Int
     , dateRangeFilter : ( DateTime, DateTime )
     , tableState : Table.State
-    , viewMode : ViewMode
+    , page : Page
     , now : DateTime
     , fqnEnabled : Bool
     }
@@ -127,11 +145,6 @@ type alias TestFailure =
     }
 
 
-type ViewMode
-    = Summary
-    | MethodDetails ClassAndMethod (Maybe String)
-
-
 type alias GroupedFailures =
     Dict ClassAndMethod (List TestFailure)
 
@@ -140,30 +153,38 @@ type alias TableRecord =
     ( ClassAndMethod, List TestFailure )
 
 
-type alias ClassAndMethod =
-    ( String, String )
-
-
 view : Model -> Html Msg
 view model =
-    case model.viewMode of
-        Summary ->
-            mainPage model
+    case model.page of
+        Page.Summary ->
+            summaryView model
 
-        MethodDetails classAndMethod mSt ->
+        Page.MethodDetails classAndMethod mSt ->
             let
                 failures =
                     getSortedFailuresOf classAndMethod model.groupedFailures
             in
-            failureDetailView classAndMethod failures model.dateRangeFilter mSt
+            if List.isEmpty failures then
+                classAndMethodNotFoundView classAndMethod
+            else
+                failureDetailView classAndMethod failures model.dateRangeFilter mSt
 
 
-mainPage : Model -> Html Msg
-mainPage model =
+summaryView : Model -> Html Msg
+summaryView model =
     div []
         [ description model.dateRangeFilter
         , filterControls model
         , failureSummaryTable model
+        ]
+
+
+classAndMethodNotFoundView : ClassAndMethod -> Html Msg
+classAndMethodNotFoundView ( clz, method ) =
+    div []
+        [ backToSummaryButton
+        , h2 [] [ text <| "No failures found for test method \"" ++ method ++ "\" from class \"" ++ clz ++ "\"" ]
+        , div [] [ text "Are you sure you've got the class and method name right?" ]
         ]
 
 
@@ -307,7 +328,7 @@ detailsColumn =
     let
         detailsButton ( ( cl, m ), _ ) =
             { attributes = []
-            , children = [ button [ onClick (ShowDetails ( cl, m )) ] [ text "Details >>" ] ]
+            , children = [ button [ onClick (GoToDetails ( cl, m )) ] [ text "Details >>" ] ]
             }
     in
     Table.veryCustomColumn
@@ -336,7 +357,7 @@ failureDetailView ( cl, m ) sortedFailures dateRange mStackTrace =
             assignColorsToStacktraces sortedFailures
     in
     div []
-        [ button [ onClick HideDetails ] [ text "<< Back to Summary" ]
+        [ backToSummaryButton
         , h2 [] [ text "Failure details" ]
         , failureDetailsSummary cl m (List.length sortedFailures) (List.length uniqueStacktracesAndMessages) (List.length uniqueStacktraces)
         , h3 [] [ text "Spread of failure dates" ]
@@ -345,6 +366,11 @@ failureDetailView ( cl, m ) sortedFailures dateRange mStackTrace =
         , failuresTable colorizedFailures
         , maybeStacktraceView
         ]
+
+
+backToSummaryButton : Html Msg
+backToSummaryButton =
+    button [ onClick GoToSummary ] [ text "<< Back to Summary" ]
 
 
 assignColorsToStacktraces : List TestFailure -> List ( TestFailure, Color )
@@ -638,3 +664,8 @@ dateTimeDecoder =
                     flds ->
                         Decode.fail <| "Unable to parse DateTime from fields" ++ toString flds
             )
+
+
+updateUrl : Page -> Cmd Msg
+updateUrl =
+    Navigation.newUrl << Page.toUrlHash
