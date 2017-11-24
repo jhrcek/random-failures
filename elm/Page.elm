@@ -39,18 +39,6 @@ route =
         ]
 
 
-parse : Navigation.Location -> Page
+parse : Navigation.Location -> Maybe Page
 parse location =
-    case UrlParser.parseHash route location of
-        Just (MethodDetails classAndMethod _) ->
-            MethodDetails classAndMethod Nothing
-
-        Just Summary ->
-            Summary
-
-        Nothing ->
-            let
-                _ =
-                    Debug.log "Failed to parse location" location
-            in
-            Summary
+    UrlParser.parseHash route location

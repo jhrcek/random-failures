@@ -26,22 +26,36 @@ main =
         { init = init
         , view = view
         , update = update
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = always Sub.none
         }
 
 
 init : Navigation.Location -> ( Model, Cmd Msg )
 init location =
     let
-        initialPage =
-            Page.parse location
+        ( initialPage, perhapsModifyUrl ) =
+            maybeNavigate location
     in
     ( initialModel initialPage
     , Cmd.batch
         [ Task.perform SetNow Time.now
-        , updateUrl initialPage
+        , perhapsModifyUrl
         ]
     )
+
+
+{-| Ensure that whenever URL is invalid, the App goes back to summary
+-}
+maybeNavigate : Navigation.Location -> ( Page, Cmd Msg )
+maybeNavigate location =
+    case Page.parse location of
+        Just p ->
+            ( p, Cmd.none )
+
+        Nothing ->
+            ( Page.Summary
+            , Navigation.modifyUrl <| Page.toUrlHash Page.Summary
+            )
 
 
 initialModel : Page -> Model
@@ -82,20 +96,6 @@ update msg model =
         SetTableState newState ->
             { model | tableState = newState } ! []
 
-        GoToDetails classAndMethod ->
-            let
-                newPage =
-                    Page.MethodDetails classAndMethod Nothing
-            in
-            ( { model | page = newPage }
-            , updateUrl newPage
-            )
-
-        GoToSummary ->
-            ( { model | page = Page.Summary }
-            , updateUrl Page.Summary
-            )
-
         SetNow timestamp ->
             { model | now = DateTime.fromTimestamp timestamp } ! []
 
@@ -111,14 +111,16 @@ update msg model =
                     model ! []
 
         UrlChange location ->
-            { model | page = Page.parse location } ! []
+            let
+                ( newPage, perhapsModifyUrl ) =
+                    maybeNavigate location
+            in
+            { model | page = newPage } ! [ perhapsModifyUrl ]
 
 
 type Msg
     = ChangeFailureCountFilter String
     | SetTableState Table.State
-    | GoToDetails ClassAndMethod
-    | GoToSummary
     | SetNow Time.Time
     | ToggleFQN Bool
     | ToggleStacktrace String
@@ -182,8 +184,19 @@ summaryView model =
 classAndMethodNotFoundView : ClassAndMethod -> Html Msg
 classAndMethodNotFoundView ( clz, method ) =
     div []
-        [ backToSummaryButton
-        , h2 [] [ text <| "No failures found for test method \"" ++ method ++ "\" from class \"" ++ clz ++ "\"" ]
+        [ backToSummaryLink
+        , h2 [] [ text <| "No failures found" ]
+        , table
+            []
+            [ tr []
+                [ td [] [ strong [] [ text "Class" ] ]
+                , td [] [ text clz ]
+                ]
+            , tr []
+                [ td [] [ strong [] [ text "Method" ] ]
+                , td [] [ text method ]
+                ]
+            ]
         , div [] [ text "Are you sure you've got the class and method name right?" ]
         ]
 
@@ -326,15 +339,15 @@ stdDevColumnName =
 detailsColumn : Table.Column TableRecord Msg
 detailsColumn =
     let
-        detailsButton ( ( cl, m ), _ ) =
+        detailsLink ( classAndMethod, _ ) =
             { attributes = []
-            , children = [ button [ onClick (GoToDetails ( cl, m )) ] [ text "Details >>" ] ]
+            , children = [ a [ href (Page.toUrlHash (Page.MethodDetails classAndMethod Nothing)) ] [ text "details >>" ] ]
             }
     in
     Table.veryCustomColumn
         { name = "Details"
         , sorter = Table.unsortable
-        , viewData = detailsButton
+        , viewData = detailsLink
         }
 
 
@@ -357,7 +370,7 @@ failureDetailView ( cl, m ) sortedFailures dateRange mStackTrace =
             assignColorsToStacktraces sortedFailures
     in
     div []
-        [ backToSummaryButton
+        [ backToSummaryLink
         , h2 [] [ text "Failure details" ]
         , failureDetailsSummary cl m (List.length sortedFailures) (List.length uniqueStacktracesAndMessages) (List.length uniqueStacktraces)
         , h3 [] [ text "Spread of failure dates" ]
@@ -368,9 +381,9 @@ failureDetailView ( cl, m ) sortedFailures dateRange mStackTrace =
         ]
 
 
-backToSummaryButton : Html Msg
-backToSummaryButton =
-    button [ onClick GoToSummary ] [ text "<< Back to Summary" ]
+backToSummaryLink : Html Msg
+backToSummaryLink =
+    a [ href (Page.toUrlHash Page.Summary) ] [ text "<< back to summary" ]
 
 
 assignColorsToStacktraces : List TestFailure -> List ( TestFailure, Color )
@@ -664,8 +677,3 @@ dateTimeDecoder =
                     flds ->
                         Decode.fail <| "Unable to parse DateTime from fields" ++ toString flds
             )
-
-
-updateUrl : Page -> Cmd Msg
-updateUrl =
-    Navigation.newUrl << Page.toUrlHash
