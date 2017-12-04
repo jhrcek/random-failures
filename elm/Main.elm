@@ -205,7 +205,9 @@ description : ( DateTime, DateTime ) -> Html Msg
 description ( fromDate, toDate ) =
     div []
         [ h2 [] [ text "Random test failure analysis" ]
-        , text "This report was generated on GENERATED_ON_PLACEHOLDER and lists all test failures in "
+        , text "This report was generated on GENERATED_ON_PLACEHOLDER and lists most"
+        , helpIcon "Builds with more than 50 test failures are excluded, because they add a loot of data without providing much value for flaky test identification."
+        , text "test failures in "
         , a [ href "https://kie-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/view/PRs/" ] [ text "kie-jenkins PR jobs" ]
         , text <| " (master only) from " ++ formatDate fromDate ++ " to " ++ formatDate toDate ++ "."
         ]
