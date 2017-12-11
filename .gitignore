@@ -2,6 +2,6 @@
 *.iml
 target
 chromedriver
-results*
+failures.json
 elm-stuff
 elm.js

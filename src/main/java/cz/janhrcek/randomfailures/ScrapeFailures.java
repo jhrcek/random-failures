@@ -58,7 +58,7 @@ public class ScrapeFailures {
                 .collect(toList()); //Ignore non-master jobs
     }
 
-    public static Stream<UnstableBuild> getUnstableBuilds(String jobUrl) {
+    private static Stream<UnstableBuild> getUnstableBuilds(String jobUrl) {
         driver.get(jobUrl);
         return driver.findElements(By.className("build-row-cell")).stream()
                 .filter(build -> build.findElements(By.cssSelector("img[alt^='Unstable']")).size() > 0)
@@ -94,11 +94,11 @@ public class ScrapeFailures {
                 if ("FAILED".equals(testStatus) || "REGRESSION".equals(testStatus)) {
                     LocalDateTime buildDateTime = LocalDateTime.parse(unstableBuild.getDate(), DATE_TIME_PARSE_FORMAT);
                     failuresInBuild.add(new TestFailure(unstableBuild.getUrl(),
-                                    buildDateTime,
-                                    test.path("className").asText(),
-                                    test.path("name").asText(),
-                                    test.path("errorStackTrace").asText()
-                            )
+                                                        buildDateTime,
+                                                        test.path("className").asText(),
+                                                        test.path("name").asText(),
+                                                        test.path("errorStackTrace").asText()
+                                        )
                     );
                 }
             }

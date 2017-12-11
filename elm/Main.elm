@@ -9,11 +9,12 @@ import FormatNumber.Locales exposing (usLocale)
 import Html exposing (Html, a, button, div, h2, h3, hr, img, input, li, strong, table, td, text, textarea, th, tr, ul)
 import Html.Attributes as Attr exposing (checked, cols, href, maxlength, name, rows, src, style, title, type_, value)
 import Html.Events exposing (onClick, onInput)
-import Input
+import Http
 import Json.Decode as Decode
 import List.Extra
 import Navigation
 import Page exposing (ClassAndMethod, Page)
+import RemoteData exposing (RemoteData(Failure, Loading, NotAsked, Success), WebData)
 import Table exposing (defaultCustomizations)
 import Task
 import Time
@@ -40,6 +41,7 @@ init location =
     , Cmd.batch
         [ Task.perform SetNow Time.now
         , perhapsModifyUrl
+        , loadFailures
         ]
     )
 
@@ -58,24 +60,18 @@ maybeNavigate location =
             )
 
 
+loadFailures : Cmd Msg
+loadFailures =
+    Http.get "failures.json" failureListDecoder
+        |> RemoteData.sendRequest
+        |> Cmd.map FailuresLoaded
+
+
 initialModel : Page -> Model
 initialModel initialPage =
-    let
-        failures =
-            parseFailuresJson Input.failureDataJsonString
-
-        sortedFailureTimestamps =
-            List.sort <| List.map (DateTime.toTimestamp << .date) failures
-
-        oldestDate =
-            DateTime.fromTimestamp <| Maybe.withDefault 0 <| List.minimum sortedFailureTimestamps
-
-        newestDate =
-            DateTime.fromTimestamp <| Maybe.withDefault 0 <| List.maximum sortedFailureTimestamps
-    in
-    { groupedFailures = groupFailuresByClassAndMethod failures
+    { groupedFailures = RemoteData.Loading
     , failureCountFilter = 5
-    , dateRangeFilter = ( oldestDate, newestDate )
+    , dateRangeFilter = ( DateTime.epoch, DateTime.epoch )
     , tableState = Table.initialSort stdDevColumnName
     , page = initialPage
     , now = DateTime.epoch
@@ -117,6 +113,30 @@ update msg model =
             in
             { model | page = newPage } ! [ perhapsModifyUrl ]
 
+        FailuresLoaded failuresRemoteData ->
+            { model
+                | groupedFailures = RemoteData.map groupFailuresByClassAndMethod failuresRemoteData
+                , dateRangeFilter =
+                    RemoteData.map calculateDateRange failuresRemoteData
+                        |> RemoteData.withDefault ( DateTime.epoch, DateTime.epoch )
+            }
+                ! []
+
+
+calculateDateRange : List TestFailure -> ( DateTime, DateTime )
+calculateDateRange failures =
+    let
+        sortedFailureTimestamps =
+            List.sort <| List.map (DateTime.toTimestamp << .date) failures
+
+        oldestDate =
+            DateTime.fromTimestamp <| Maybe.withDefault 0 <| List.minimum sortedFailureTimestamps
+
+        newestDate =
+            DateTime.fromTimestamp <| Maybe.withDefault 0 <| List.maximum sortedFailureTimestamps
+    in
+    ( oldestDate, newestDate )
+
 
 type Msg
     = ChangeFailureCountFilter String
@@ -125,10 +145,11 @@ type Msg
     | ToggleFQN Bool
     | ToggleStacktrace String
     | UrlChange Navigation.Location
+    | FailuresLoaded (WebData (List TestFailure))
 
 
 type alias Model =
-    { groupedFailures : GroupedFailures
+    { groupedFailures : WebData GroupedFailures
     , failureCountFilter : Int
     , dateRangeFilter : ( DateTime, DateTime )
     , tableState : Table.State
@@ -157,19 +178,31 @@ type alias TableRecord =
 
 view : Model -> Html Msg
 view model =
-    case model.page of
-        Page.Summary ->
-            summaryView model
+    case model.groupedFailures of
+        NotAsked ->
+            -- can't happen as we're beginning in the Loading state
+            div [] [ text "Request to load failures.json wasn't sent" ]
 
-        Page.MethodDetails classAndMethod mSt ->
-            let
-                failures =
-                    getSortedFailuresOf classAndMethod model.groupedFailures
-            in
-            if List.isEmpty failures then
-                classAndMethodNotFoundView classAndMethod
-            else
-                failureDetailView classAndMethod failures model.dateRangeFilter mSt
+        Loading ->
+            div [] [ text "Loading data ..." ]
+
+        Failure e ->
+            div [] [ text <| toString e ]
+
+        Success loadedFailures ->
+            case model.page of
+                Page.Summary ->
+                    summaryView model
+
+                Page.MethodDetails classAndMethod mSt ->
+                    let
+                        failures =
+                            getSortedFailuresOf classAndMethod loadedFailures
+                    in
+                    if List.isEmpty failures then
+                        classAndMethodNotFoundView classAndMethod
+                    else
+                        failureDetailView classAndMethod failures model.dateRangeFilter mSt
 
 
 summaryView : Model -> Html Msg
@@ -240,16 +273,21 @@ filterControls { failureCountFilter, fqnEnabled } =
 
 failureSummaryTable : Model -> Html Msg
 failureSummaryTable model =
-    let
-        acceptedFailures =
-            Dict.toList model.groupedFailures
-                |> List.filter (\( _, failures ) -> List.length failures >= model.failureCountFilter)
-    in
-    div []
-        [ h3 [] [ text "Failures (grouped by Class and Test method)" ]
-        , Table.view (tableConfig model.now model.fqnEnabled) model.tableState acceptedFailures
-        , summaryLegend
-        ]
+    case model.groupedFailures of
+        Success failureData ->
+            let
+                acceptedFailures =
+                    Dict.toList failureData
+                        |> List.filter (\( _, failures ) -> List.length failures >= model.failureCountFilter)
+            in
+            div []
+                [ h3 [] [ text "Failures (grouped by Class and Test method)" ]
+                , Table.view (tableConfig model.now model.fqnEnabled) model.tableState acceptedFailures
+                , summaryLegend
+                ]
+
+        _ ->
+            div [] [ text "No data available" ]
 
 
 summaryLegend : Html Msg
@@ -343,7 +381,7 @@ detailsColumn =
     let
         detailsLink ( classAndMethod, _ ) =
             { attributes = []
-            , children = [ a [ href (Page.toUrlHash (Page.MethodDetails classAndMethod Nothing)) ] [ text "details >>" ] ]
+            , children = [ a [ href (Page.toUrlHash (Page.MethodDetails classAndMethod Nothing)) ] [ text "details >>" ] ]
             }
     in
     Table.veryCustomColumn
@@ -627,9 +665,9 @@ fqnToSimpleClassName fqn =
     String.split "." fqn |> List.reverse |> List.head |> Maybe.withDefault fqn
 
 
-parseFailuresJson : String -> List TestFailure
-parseFailuresJson =
-    Result.withDefault [] << Decode.decodeString (Decode.list testFailureDecoder)
+failureListDecoder : Decode.Decoder (List TestFailure)
+failureListDecoder =
+    Decode.list testFailureDecoder
 
 
 standardDeviation : List DateTime -> Float
