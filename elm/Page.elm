@@ -6,8 +6,9 @@ module Page
         , toUrlHash
         )
 
+import Http
 import Navigation
-import UrlParser exposing ((</>), Parser, map, oneOf, s, string)
+import UrlParser exposing ((</>), Parser, custom, map, oneOf, s)
 
 
 type Page
@@ -26,7 +27,7 @@ toUrlHash page =
             "#/summary"
 
         MethodDetails ( clz, method ) _ ->
-            "#/class/" ++ clz ++ "/method/" ++ method
+            "#/class/" ++ Http.encodeUri clz ++ "/method/" ++ Http.encodeUri method
 
 
 route : Parser (Page -> a) a
@@ -35,8 +36,15 @@ route =
         [ map Summary (s "summary")
         , map
             (\clz method -> MethodDetails ( clz, method ) Nothing)
-            (s "class" </> string </> s "method" </> string)
+            (s "class" </> uriEncodedString </> s "method" </> uriEncodedString)
         ]
+
+
+uriEncodedString : Parser (String -> a) a
+uriEncodedString =
+    custom "URI_ENCODED_STRING" <|
+        \piece ->
+            Result.fromMaybe ("Failed to decode URI piece" ++ piece) (Http.decodeUri piece)
 
 
 parse : Navigation.Location -> Maybe Page
