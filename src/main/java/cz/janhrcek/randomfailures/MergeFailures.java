@@ -13,8 +13,12 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 public class MergeFailures {
 
     public static void main(String[] args) throws IOException {
+        new MergeFailures().mergeFailures();
+    }
+
+    private void mergeFailures() throws IOException {
         File[] reportFiles = findReports();
-        System.out.println("Going to merge " + reportFiles.length + " report files");
+        System.out.println("Merging " + reportFiles.length + " report files");
         Set<TestFailure> mergedFailures = new HashSet<>();
 
         for (File reportFile : reportFiles) {
@@ -28,15 +32,15 @@ public class MergeFailures {
         ScrapeFailures.saveToJson(mergedFailures, new File("elm/dist/failures.json"));
     }
 
-    private static List<TestFailure> readReport(File resultsFile) throws IOException {
+    private List<TestFailure> readReport(File resultsFile) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         TestFailure[] failures = mapper.readValue(resultsFile, TestFailure[].class);
         return Arrays.asList(failures);
     }
 
-    private static File[] findReports() {
-        File reportsDir = new File("/home/jhrcek/Dropbox/Projects/randomFailuresAnalysis");
+    private File[] findReports() {
+        File reportsDir = new Config().getReportsDir();
         if (!reportsDir.exists() || !reportsDir.isDirectory()) {
             throw new IllegalArgumentException("reportsDir must be existing directory");
         }

@@ -113,7 +113,7 @@ public class ScrapeFailures {
 
     private static void saveFailuresToFile(Set<TestFailure> failures) throws IOException {
         String filename = "results" + LocalDate.now() + ".txt";
-        File outputFile = new File(filename);
+        File outputFile = new File(new Config().getReportsDir(), filename);
         saveToJson(failures, outputFile);
     }
 
