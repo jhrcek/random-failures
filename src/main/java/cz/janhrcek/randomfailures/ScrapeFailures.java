@@ -23,16 +23,20 @@ import static java.util.stream.Collectors.toList;
 
 public class ScrapeFailures {
 
-    private static WebDriver driver;
-    private static Set<TestFailure> allFailures = new HashSet<>();
-    private static DateTimeFormatter DATE_TIME_PARSE_FORMAT = DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a");
+    private WebDriver driver;
+    private final Set<TestFailure> allFailures = new HashSet<>();
+    private static final DateTimeFormatter DATE_TIME_PARSE_FORMAT = DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a");
 
     public static void main(String[] args) throws IOException {
+        new ScrapeFailures().scrapeFailuresAndSaveToFile();
+    }
+
+    public void scrapeFailuresAndSaveToFile() throws IOException {
         driver = new ChromeDriver();
 
         List<String> jobLinks = getMasterPrJobLinks();
         List<UnstableBuild> unstableBuilds = jobLinks.stream()
-                .flatMap(ScrapeFailures::getUnstableBuilds)
+                .flatMap(this::getUnstableBuilds)
                 .collect(toList());
 
         System.out.println(unstableBuilds.size() + " unstable builds to scrape");
@@ -50,7 +54,7 @@ public class ScrapeFailures {
         driver.close();
     }
 
-    private static List<String> getMasterPrJobLinks() {
+    private List<String> getMasterPrJobLinks() {
         driver.get("https://kie-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/view/PRs/");
         return driver.findElements(By.partialLinkText("-pullrequests")).stream()
                 .map(element -> element.getAttribute("href"))
@@ -58,7 +62,7 @@ public class ScrapeFailures {
                 .collect(toList()); //Ignore non-master jobs
     }
 
-    private static Stream<UnstableBuild> getUnstableBuilds(String jobUrl) {
+    private Stream<UnstableBuild> getUnstableBuilds(String jobUrl) {
         driver.get(jobUrl);
         return driver.findElements(By.className("build-row-cell")).stream()
                 .filter(build -> build.findElements(By.cssSelector("img[alt^='Unstable']")).size() > 0)
@@ -71,14 +75,14 @@ public class ScrapeFailures {
                 });
     }
 
-    private static void collectTestFailures(UnstableBuild unstableBuild) throws IOException {
+    private void collectTestFailures(UnstableBuild unstableBuild) throws IOException {
         String failedTestJsonUrl = unstableBuild.getUrl() + "api/json?tree=suites[cases[className,errorDetails,errorStackTrace,name,status]]";
         driver.get(failedTestJsonUrl);
         String jsonSource = driver.findElement(By.tagName("pre")).getText();
         extractFailedTests(unstableBuild, jsonSource);
     }
 
-    private static void extractFailedTests(UnstableBuild unstableBuild, String inputJson) throws IOException {
+    private void extractFailedTests(UnstableBuild unstableBuild, String inputJson) throws IOException {
         List<TestFailure> failuresInBuild = new ArrayList<>();
         ObjectMapper mapper = new ObjectMapper();
         JsonNode root = mapper.readTree(inputJson);
@@ -111,10 +115,14 @@ public class ScrapeFailures {
         }
     }
 
-    private static void saveFailuresToFile(Set<TestFailure> failures) throws IOException {
-        String filename = "results" + LocalDate.now() + ".txt";
-        File outputFile = new File(new Config().getReportsDir(), filename);
+    private void saveFailuresToFile(Set<TestFailure> failures) throws IOException {
+        File outputFile = getOutputFileName();
         saveToJson(failures, outputFile);
+    }
+
+    private File getOutputFileName() {
+        String filename = "results" + LocalDate.now() + ".txt";
+        return new File(new Config().getReportsDir(), filename);
     }
 
     static void saveToJson(Set<TestFailure> failures, File outputFile) throws IOException {
