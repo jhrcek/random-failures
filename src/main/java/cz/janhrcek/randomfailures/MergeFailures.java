@@ -16,7 +16,7 @@ public class MergeFailures {
         new MergeFailures().mergeFailures();
     }
 
-    private void mergeFailures() throws IOException {
+    void mergeFailures() throws IOException {
         File[] reportFiles = findReports();
         System.out.println("Merging " + reportFiles.length + " report files");
         Set<TestFailure> mergedFailures = new HashSet<>();

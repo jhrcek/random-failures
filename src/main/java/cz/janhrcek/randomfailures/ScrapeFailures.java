@@ -32,26 +32,30 @@ public class ScrapeFailures {
     }
 
     public void scrapeFailuresAndSaveToFile() throws IOException {
-        driver = new ChromeDriver();
+        try {
+            driver = new ChromeDriver();
 
-        List<String> jobLinks = getMasterPrJobLinks();
-        List<UnstableBuild> unstableBuilds = jobLinks.stream()
-                .flatMap(this::getUnstableBuilds)
-                .collect(toList());
+            List<String> jobLinks = getMasterPrJobLinks();
+            List<UnstableBuild> unstableBuilds = jobLinks.stream()
+                    .flatMap(this::getUnstableBuilds)
+                    .collect(toList());
 
-        System.out.println(unstableBuilds.size() + " unstable builds to scrape");
+            System.out.println(unstableBuilds.size() + " unstable builds to scrape");
 
-        unstableBuilds.forEach(url -> {
-            try {
-                collectTestFailures(url);
-            } catch (IOException e) {
-                e.printStackTrace();
+            unstableBuilds.forEach(url -> {
+                try {
+                    collectTestFailures(url);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+
+            saveFailuresToFile(allFailures);
+        } finally {
+            if (driver != null) {
+                driver.quit();
             }
-        });
-
-        saveFailuresToFile(allFailures);
-
-        driver.close();
+        }
     }
 
     private List<String> getMasterPrJobLinks() {
