@@ -29,7 +29,7 @@ public class MergeFailures {
 
         System.out.println("Found " + mergedFailures.size() + " unique failures in total");
 
-        ScrapeFailures.saveToJson(mergedFailures, new File("elm/dist/failures.json"));
+        ScrapeFailures.saveToJson(mergedFailures, new File("../frontend/dist/failures.json"));
     }
 
     private List<TestFailure> readReport(File resultsFile) throws IOException {
