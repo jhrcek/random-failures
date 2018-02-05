@@ -3,17 +3,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 import Turtle
 
+
 main :: IO ()
 main = do
     gitCheckout "master"
     scrapeFailures
     buildFrontend
     deployToGhPages
-
-
-gitBranch :: IO Text
-gitBranch =
-   fmap lineToText . single $ inshell "git rev-parse --abbrev-ref HEAD" empty
 
 
 gitCheckout :: Text -> IO ()
@@ -32,7 +28,7 @@ buildFrontend =
 addGeneratedOnInfo :: IO ()
 addGeneratedOnInfo = do
     d <- today
-    inplace ((const d) <$> text "GENERATED_ON_PLACEHOLDER") "dist/js/elm.js"
+    inplace (const d <$> text "GENERATED_ON_PLACEHOLDER") "dist/js/elm.js"
 
 
 today :: IO Text
@@ -44,12 +40,11 @@ minifyJs = do
     maybeUglifyPath <- which "uglifyjs"
     case maybeUglifyPath of
         Nothing -> die "uglifyjs is not installed. You can install it 'sudo npm -global install uglify-js'"
-        Just uglifyPath -> do
-            procs "uglifyjs" ["dist/js/elm.js", "--compress", "--mangle", "--output", "dist/js/elm.min.js"] empty
+        Just uglifyPath -> procs "uglifyjs" ["dist/js/elm.js", "--compress", "--mangle", "--output", "dist/js/elm.min.js"] empty
 
 
 scrapeFailures :: IO ()
-scrapeFailures = do
+scrapeFailures =
     with (pushd "scraper") $ \() -> do
         shells "mvn clean compile assembly:single" empty
         ensureChromedriverExists
@@ -65,7 +60,7 @@ ensureChromedriverExists = do
 
 
 deployToGhPages :: IO ()
-deployToGhPages = do
+deployToGhPages =
     with (mktempdir "/tmp" "random-failures") $ \tmpdir -> do
         cptree "frontend/dist" tmpdir
         gitCheckout "gh-pages"
