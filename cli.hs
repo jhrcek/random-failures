@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
--- stack script --resolver lts-10.4 --package turtle
+-- stack script --resolver lts-10.7 --package turtle
 {-# LANGUAGE OverloadedStrings #-}
 import Turtle
 
