@@ -1,8 +1,8 @@
 #!/usr/bin/env stack
--- stack script --resolver lts-10.7 --package turtle
+-- stack script --resolver lts-10.8 --package turtle
 {-# LANGUAGE OverloadedStrings #-}
+import Prelude hiding (FilePath)
 import Turtle
-
 
 main :: IO ()
 main = do
@@ -15,6 +15,11 @@ main = do
 gitCheckout :: Text -> IO ()
 gitCheckout branch =
     procs "git" ["checkout", branch] empty
+
+
+gitAdd :: [FilePath] -> IO ()
+gitAdd files =
+    procs "git" ("add" : fmap (format fp) files) empty
 
 
 buildFrontend :: IO ()
@@ -40,7 +45,7 @@ minifyJs = do
     maybeUglifyPath <- which "uglifyjs"
     case maybeUglifyPath of
         Nothing -> die "uglifyjs is not installed. You can install it 'sudo npm -global install uglify-js'"
-        Just uglifyPath -> procs "uglifyjs" ["dist/js/elm.js", "--compress", "--mangle", "--output", "dist/js/elm.min.js"] empty
+        Just uglifyPath -> shells "uglifyjs dist/js/elm.js --compress --mangle --output dist/js/elm.min.js" empty
 
 
 scrapeFailures :: IO ()
@@ -65,3 +70,4 @@ deployToGhPages =
         cptree "frontend/dist" tmpdir
         gitCheckout "gh-pages"
         pwd >>= cptree tmpdir
+        gitAdd ["failures.json", "js/elm.min.js"]
