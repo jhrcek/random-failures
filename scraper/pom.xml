@@ -10,8 +10,8 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <selenium.version>3.8.1</selenium.version>
-    <jackson.version>2.9.3</jackson.version>
+    <selenium.version>3.11.0</selenium.version>
+    <jackson.version>2.9.4</jackson.version>
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
   </properties>
