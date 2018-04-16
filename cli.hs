@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
--- stack script --resolver lts-11.2 --package turtle
+-- stack script --resolver lts-11.5 --package turtle
 {-# LANGUAGE OverloadedStrings #-}
 import Prelude hiding (FilePath)
 import Turtle
@@ -43,9 +43,15 @@ today = fmap lineToText . single $ inshell "date +%F" empty
 minifyJs :: IO ()
 minifyJs = do
     maybeUglifyPath <- which "uglifyjs"
-    case maybeUglifyPath of
-        Nothing -> die "uglifyjs is not installed. You can install it 'sudo npm -global install uglify-js'"
-        Just uglifyPath -> shells "uglifyjs dist/js/elm.js --compress --mangle --output dist/js/elm.min.js" empty
+    when (maybeUglifyPath == Nothing) installUglifyjs
+    shells "uglifyjs dist/js/elm.js --compress --mangle --output dist/js/elm.min.js" empty
+
+
+installUglifyjs :: IO ()
+installUglifyjs = do
+    let command = "sudo npm --global install uglify-js"
+    echo . unsafeTextToLine $ "uglifyjs is not installed. Installing it using: " <> command
+    shells command empty
 
 
 scrapeFailures :: IO ()
