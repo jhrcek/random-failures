@@ -176,6 +176,16 @@ type alias TableRecord =
     ( ClassAndMethod, List TestFailure )
 
 
+{-| When the failure comes from setup method (@Before, @After etc), Jenkins uses class name as method name
+-}
+getMethodName : ClassAndMethod -> String
+getMethodName ( className, methodName ) =
+    if className == methodName then
+        "JUnit setup method (@Before, @After etc.)"
+    else
+        methodName
+
+
 view : Model -> Html Msg
 view model =
     case model.groupedFailures of
@@ -325,7 +335,8 @@ tableConfig now fqnEnabled =
                     else
                         fqnToSimpleClassName cl
                 )
-            , Table.stringColumn "Method" (\( ( _, m ), _ ) -> m)
+            , Table.stringColumn "Method"
+                (\( classAndMethod, _ ) -> getMethodName classAndMethod)
             , Table.intColumn "Failures" (\( ( _, _ ), fs ) -> List.length fs)
             , stdDevColumn
             , Table.intColumn "Days since last failure" (\( _, fs ) -> daysSinceLastFailure fs now)
@@ -392,7 +403,7 @@ detailsColumn =
 
 
 failureDetailView : ClassAndMethod -> List TestFailure -> ( DateTime, DateTime ) -> Maybe String -> Html Msg
-failureDetailView ( cl, m ) sortedFailures dateRange mStackTrace =
+failureDetailView classAndMethod sortedFailures dateRange mStackTrace =
     let
         stacktraces =
             List.map .stackTrace sortedFailures
@@ -412,7 +423,7 @@ failureDetailView ( cl, m ) sortedFailures dateRange mStackTrace =
     div []
         [ backToSummaryLink
         , h2 [] [ text "Failure details" ]
-        , failureDetailsSummary cl m (List.length sortedFailures) (List.length uniqueStacktracesAndMessages) (List.length uniqueStacktraces)
+        , failureDetailsSummary classAndMethod (List.length sortedFailures) (List.length uniqueStacktracesAndMessages) (List.length uniqueStacktraces)
         , h3 [] [ text "Spread of failure dates" ]
         , viewFailureDatesChart dateRange colorizedFailures
         , h3 [] [ text "Failures" ]
@@ -474,8 +485,8 @@ stacktraceColors =
     ]
 
 
-failureDetailsSummary : String -> String -> Int -> Int -> Int -> Html Msg
-failureDetailsSummary className methodName totalFailures uniqueStacktracesAndMessagesCount uniqueStacktracesCount =
+failureDetailsSummary : ClassAndMethod -> Int -> Int -> Int -> Html Msg
+failureDetailsSummary (( className, _ ) as classAndMethod) totalFailures uniqueStacktracesAndMessagesCount uniqueStacktracesCount =
     table []
         [ tr []
             [ td [] [ strong [] [ text "Class" ] ]
@@ -483,7 +494,7 @@ failureDetailsSummary className methodName totalFailures uniqueStacktracesAndMes
             ]
         , tr []
             [ td [] [ strong [] [ text "Method" ] ]
-            , td [] [ text methodName ]
+            , td [] [ text (getMethodName classAndMethod) ]
             ]
         , tr []
             [ td [] [ strong [] [ text "Total failures" ] ]
