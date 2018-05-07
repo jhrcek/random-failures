@@ -6,7 +6,7 @@ import Dict exposing (Dict)
 import Dict.Extra
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, a, button, div, h2, h3, hr, img, input, li, strong, table, td, text, textarea, th, tr, ul)
+import Html exposing (Html, a, button, div, h2, h3, img, input, li, strong, table, td, text, textarea, th, tr, ul)
 import Html.Attributes as Attr exposing (checked, cols, href, maxlength, name, rows, src, style, title, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Http
@@ -46,7 +46,7 @@ init location =
     )
 
 
-{-| Ensure that whenever URL is invalid, the App goes back to summary
+{-| Ensure that whenever URL is invalid, the App goes back to Home page
 -}
 maybeNavigate : Navigation.Location -> ( Page, Cmd Msg )
 maybeNavigate location =
@@ -55,8 +55,8 @@ maybeNavigate location =
             ( p, Cmd.none )
 
         Nothing ->
-            ( Page.Summary
-            , Navigation.modifyUrl <| Page.toUrlHash Page.Summary
+            ( Page.Home
+            , Navigation.modifyUrl <| Page.toUrlHash Page.Home
             )
 
 
@@ -70,24 +70,30 @@ loadFailures =
 initialModel : Page -> Model
 initialModel initialPage =
     { groupedFailures = RemoteData.Loading
-    , failureCountFilter = 5
-    , dateRangeFilter = ( DateTime.epoch, DateTime.epoch )
-    , tableState = Table.initialSort stdDevColumnName
+    , filters =
+        { failureCount = 5
+        , dateRange = ( DateTime.epoch, DateTime.epoch )
+        , className = Page.toClassFilter initialPage
+        }
+    , tableState = Table.initialSort daysSinceLastFailureColumnName
     , page = initialPage
     , now = DateTime.epoch
     , fqnEnabled = False
     }
 
 
+type alias Filters =
+    { failureCount : Int
+    , dateRange : ( DateTime, DateTime )
+    , className : Maybe String
+    }
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        ChangeFailureCountFilter str ->
-            let
-                newFailureCountFilter =
-                    String.toInt str |> Result.withDefault 1
-            in
-            { model | failureCountFilter = newFailureCountFilter } ! []
+        ChangeFailureCountFilter failureCountStr ->
+            { model | filters = setFailureCountFilter failureCountStr model.filters } ! []
 
         SetTableState newState ->
             { model | tableState = newState } ! []
@@ -110,17 +116,46 @@ update msg model =
             let
                 ( newPage, perhapsModifyUrl ) =
                     maybeNavigate location
+
+                newClassFilter =
+                    Page.toClassFilter newPage
             in
-            { model | page = newPage } ! [ perhapsModifyUrl ]
+            { model
+                | page = newPage
+                , filters = setClassFilter newClassFilter model.filters
+            }
+                ! [ perhapsModifyUrl ]
 
         FailuresLoaded failuresRemoteData ->
-            { model
-                | groupedFailures = RemoteData.map groupFailuresByClassAndMethod failuresRemoteData
-                , dateRangeFilter =
+            let
+                dateRange =
                     RemoteData.map calculateDateRange failuresRemoteData
                         |> RemoteData.withDefault ( DateTime.epoch, DateTime.epoch )
+            in
+            { model
+                | groupedFailures = RemoteData.map groupFailuresByClassAndMethod failuresRemoteData
+                , filters = setDateRangeFilter dateRange model.filters
             }
                 ! []
+
+
+setFailureCountFilter : String -> Filters -> Filters
+setFailureCountFilter fcStr filters =
+    let
+        newFailureCount =
+            String.toInt fcStr |> Result.withDefault 1
+    in
+    { filters | failureCount = newFailureCount }
+
+
+setDateRangeFilter : ( DateTime, DateTime ) -> Filters -> Filters
+setDateRangeFilter rng filters =
+    { filters | dateRange = rng }
+
+
+setClassFilter : Maybe String -> Filters -> Filters
+setClassFilter maybeClassName filters =
+    { filters | className = maybeClassName }
 
 
 calculateDateRange : List TestFailure -> ( DateTime, DateTime )
@@ -150,8 +185,7 @@ type Msg
 
 type alias Model =
     { groupedFailures : WebData GroupedFailures
-    , failureCountFilter : Int
-    , dateRangeFilter : ( DateTime, DateTime )
+    , filters : Filters
     , tableState : Table.State
     , page : Page
     , now : DateTime
@@ -201,8 +235,11 @@ view model =
 
         Success loadedFailures ->
             case model.page of
-                Page.Summary ->
-                    summaryView model
+                Page.Home ->
+                    homeView model
+
+                Page.ClassDetails clz ->
+                    classDetailsView clz model
 
                 Page.MethodDetails classAndMethod mSt ->
                     let
@@ -212,14 +249,25 @@ view model =
                     if List.isEmpty failures then
                         classAndMethodNotFoundView classAndMethod
                     else
-                        failureDetailView classAndMethod failures model.dateRangeFilter mSt
+                        failureDetailView classAndMethod failures model.filters.dateRange mSt
 
 
-summaryView : Model -> Html Msg
-summaryView model =
+homeView : Model -> Html Msg
+homeView model =
     div []
-        [ description model.dateRangeFilter
+        [ description model.filters.dateRange
         , filterControls model
+        , h3 [] [ text "Failures (grouped by Class and Test method)" ]
+        , failureSummaryTable model
+        , faq
+        ]
+
+
+classDetailsView : String -> Model -> Html Msg
+classDetailsView fqcn model =
+    div []
+        [ homeLink
+        , h3 [] [ text <| "Failures in class " ++ fqcn ]
         , failureSummaryTable model
         ]
 
@@ -227,7 +275,7 @@ summaryView model =
 classAndMethodNotFoundView : ClassAndMethod -> Html Msg
 classAndMethodNotFoundView ( clz, method ) =
     div []
-        [ backToSummaryLink
+        [ homeLink
         , h2 [] [ text <| "No failures found" ]
         , table
             []
@@ -257,7 +305,7 @@ description ( fromDate, toDate ) =
 
 
 filterControls : Model -> Html Msg
-filterControls { failureCountFilter, fqnEnabled } =
+filterControls { filters, fqnEnabled } =
     div []
         [ text "Show tests that failed "
         , input
@@ -266,7 +314,7 @@ filterControls { failureCountFilter, fqnEnabled } =
             , Attr.min "0"
             , Attr.max "100"
             , onInput ChangeFailureCountFilter
-            , value (toString failureCountFilter)
+            , value (toString filters.failureCount)
             , style [ ( "width", "50px" ) ]
             ]
             []
@@ -287,25 +335,28 @@ failureSummaryTable model =
         Success failureData ->
             let
                 acceptedFailures =
-                    Dict.toList failureData
-                        |> List.filter (\( _, failures ) -> List.length failures >= model.failureCountFilter)
+                    applyFilters model.filters failureData
             in
             div []
-                [ h3 [] [ text "Failures (grouped by Class and Test method)" ]
-                , Table.view (tableConfig model.now model.fqnEnabled) model.tableState acceptedFailures
-                , summaryLegend
+                [ Table.view (tableConfig model.now model.fqnEnabled) model.tableState acceptedFailures
+                , div [] [ text "* Standard deviation of failure dates (in days)" ]
                 ]
 
         _ ->
             div [] [ text "No data available" ]
 
 
-summaryLegend : Html Msg
-summaryLegend =
+applyFilters : Filters -> GroupedFailures -> List ( ClassAndMethod, List TestFailure )
+applyFilters filters groupedFailures =
+    Dict.toList groupedFailures
+        |> List.filter (\( _, failures ) -> filters.failureCount <= List.length failures)
+        |> List.filter (\( ( fqcn, _ ), _ ) -> filters.className |> Maybe.map (\chosenFqcn -> chosenFqcn == fqcn) |> Maybe.withDefault True)
+
+
+faq : Html Msg
+faq =
     div []
-        [ hr [] []
-        , div [] [ text "* Standard deviation of failure dates (in days)" ]
-        , h2 [] [ text "When is test method considered to be failing randomly?" ]
+        [ h2 [] [ text "When is test method considered to be failing randomly?" ]
         , div []
             [ text <|
                 "The following heuristic is used to highlight random failures. "
@@ -325,22 +376,14 @@ summaryLegend =
 tableConfig : DateTime -> Bool -> Table.Config TableRecord Msg
 tableConfig now fqnEnabled =
     Table.customConfig
-        { toId = \( ( cl, _ ), _ ) -> cl
+        { toId = \( ( fqcn, method ), _ ) -> fqcn ++ method
         , toMsg = SetTableState
         , columns =
-            [ Table.stringColumn "Class"
-                (\( ( cl, _ ), _ ) ->
-                    if fqnEnabled then
-                        cl
-                    else
-                        fqnToSimpleClassName cl
-                )
-            , Table.stringColumn "Method"
-                (\( classAndMethod, _ ) -> getMethodName classAndMethod)
+            [ classColumn fqnEnabled
+            , methodColumn
             , Table.intColumn "Failures" (\( ( _, _ ), fs ) -> List.length fs)
             , stdDevColumn
-            , Table.intColumn "Days since last failure" (\( _, fs ) -> daysSinceLastFailure fs now)
-            , detailsColumn
+            , Table.intColumn daysSinceLastFailureColumnName (\( _, fs ) -> daysSinceLastFailure fs now)
             ]
         , customizations =
             { defaultCustomizations
@@ -352,6 +395,11 @@ tableConfig now fqnEnabled =
                             []
             }
         }
+
+
+daysSinceLastFailureColumnName : String
+daysSinceLastFailureColumnName =
+    "Days since last failure"
 
 
 isProbablyRandom : List TestFailure -> DateTime -> Bool
@@ -369,6 +417,49 @@ isProbablyRandom fs now =
     failureCount >= 5 && lastFailureDaysAgo < 14 && failureDatesStdDev > 5
 
 
+classColumn : Bool -> Table.Column TableRecord Msg
+classColumn fqnEnabled =
+    let
+        getVisibleClassName ( ( fqcn, _ ), _ ) =
+            if fqnEnabled then
+                fqcn
+            else
+                fqnToSimpleClassName fqcn
+
+        classDetailsLink (( ( fqcn, _ ), _ ) as record) =
+            { attributes = []
+            , children =
+                [ a [ href (Page.toUrlHash (Page.ClassDetails fqcn)) ]
+                    [ text <| getVisibleClassName record
+                    ]
+                ]
+            }
+    in
+    Table.veryCustomColumn
+        { name = "Class"
+        , sorter = Table.increasingOrDecreasingBy getVisibleClassName
+        , viewData = classDetailsLink
+        }
+
+
+methodColumn : Table.Column TableRecord Msg
+methodColumn =
+    let
+        detailsLink ( classAndMethod, _ ) =
+            { attributes = []
+            , children =
+                [ a [ href (Page.toUrlHash (Page.MethodDetails classAndMethod Nothing)) ]
+                    [ text <| getMethodName classAndMethod ]
+                ]
+            }
+    in
+    Table.veryCustomColumn
+        { name = "Method"
+        , sorter = Table.increasingOrDecreasingBy (\( classAndMethod, _ ) -> getMethodName classAndMethod)
+        , viewData = detailsLink
+        }
+
+
 stdDevColumn : Table.Column TableRecord Msg
 stdDevColumn =
     let
@@ -376,29 +467,9 @@ stdDevColumn =
             standardDeviation <| List.map .date fs
     in
     Table.customColumn
-        { name = stdDevColumnName
+        { name = "Spread of failure dates *"
         , viewData = FormatNumber.format usLocale << getDeviation
         , sorter = Table.decreasingOrIncreasingBy getDeviation
-        }
-
-
-stdDevColumnName : String
-stdDevColumnName =
-    "Spread of failure dates *"
-
-
-detailsColumn : Table.Column TableRecord Msg
-detailsColumn =
-    let
-        detailsLink ( classAndMethod, _ ) =
-            { attributes = []
-            , children = [ a [ href (Page.toUrlHash (Page.MethodDetails classAndMethod Nothing)) ] [ text "details >>" ] ]
-            }
-    in
-    Table.veryCustomColumn
-        { name = "Details"
-        , sorter = Table.unsortable
-        , viewData = detailsLink
         }
 
 
@@ -421,7 +492,7 @@ failureDetailView classAndMethod sortedFailures dateRange mStackTrace =
             assignColorsToStacktraces sortedFailures
     in
     div []
-        [ backToSummaryLink
+        [ homeLink
         , h2 [] [ text "Failure details" ]
         , failureDetailsSummary classAndMethod (List.length sortedFailures) (List.length uniqueStacktracesAndMessages) (List.length uniqueStacktraces)
         , h3 [] [ text "Spread of failure dates" ]
@@ -432,9 +503,9 @@ failureDetailView classAndMethod sortedFailures dateRange mStackTrace =
         ]
 
 
-backToSummaryLink : Html Msg
-backToSummaryLink =
-    a [ href (Page.toUrlHash Page.Summary) ] [ text "<< back to summary" ]
+homeLink : Html Msg
+homeLink =
+    a [ href (Page.toUrlHash Page.Home) ] [ text "<< home" ]
 
 
 assignColorsToStacktraces : List TestFailure -> List ( TestFailure, Color )
