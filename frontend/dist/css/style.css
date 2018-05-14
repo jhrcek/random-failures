@@ -9,3 +9,11 @@ table {
 td, th {
   border: 1px solid black;
 }
+
+a:link, a:visited {
+  text-decoration: none;
+}
+
+a:hover, a:active {
+  text-decoration: underline;
+}
