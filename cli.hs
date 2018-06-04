@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
--- stack script --resolver lts-11.10 --package turtle
+-- stack script --resolver lts-11.11 --package turtle
 {-# LANGUAGE OverloadedStrings #-}
 import Prelude hiding (FilePath)
 import Turtle
@@ -66,7 +66,7 @@ ensureChromedriverExists :: IO ()
 ensureChromedriverExists = do
     exists <- testfile "chromedriver"
     unless exists $ do
-      shells "wget --quiet --show-progress https://chromedriver.storage.googleapis.com/2.38/chromedriver_linux64.zip" empty
+      shells "wget --quiet --show-progress https://chromedriver.storage.googleapis.com/2.39/chromedriver_linux64.zip" empty
       shells "unzip chromedriver_linux64.zip && rm chromedriver_linux64.zip" empty
 
 
