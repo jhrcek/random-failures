@@ -1,0 +1,31 @@
+name:               scraper
+version:            0.1.0.0
+synopsis:           Tool to download info about test failures from Jenkins
+homepage:           https://github.com/jhrcek/random-failures
+license:            BSD3
+author:             Jan Hrček
+maintainer:         jhrcek@redhat.com
+copyright:          2018 Jan Hrček
+category:           Web
+extra-source-files:
+- README.md
+
+dependencies:
+  - aeson
+  - base >= 4.7 && < 5
+  - bytestring
+  - conduit
+  - feed
+  - lens
+  - lens-aeson
+  - text
+  - time
+  - wreq
+  - directory
+  - filepath
+
+executables:
+  scraper:
+    source-dirs:    src
+    main:           Main.hs
+    ghc-options:    -Wall -O2

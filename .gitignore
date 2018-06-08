@@ -1,8 +1,7 @@
-.idea
-*.iml
-target
-chromedriver
-failures.json
+failures*.json
 elm-stuff
 elm.js
 elm.min.js
+.stack-work
+# using hpack's package.yaml, so don't version .cabal
+scraper/scraper.cabal

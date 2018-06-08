@@ -1,8 +1,8 @@
 #!/usr/bin/env stack
--- stack script --resolver lts-11.11 --package turtle
+-- stack script --resolver lts-11.12 --package turtle
 {-# LANGUAGE OverloadedStrings #-}
-import Prelude hiding (FilePath)
-import Turtle
+import           Prelude hiding (FilePath)
+import           Turtle
 
 main :: IO ()
 main = do
@@ -56,18 +56,8 @@ installUglifyjs = do
 
 scrapeFailures :: IO ()
 scrapeFailures =
-    with (pushd "scraper") $ \() -> do
-        shells "mvn clean compile assembly:single" empty
-        ensureChromedriverExists
-        shells "java -jar target/scraper.jar" empty
-
-
-ensureChromedriverExists :: IO ()
-ensureChromedriverExists = do
-    exists <- testfile "chromedriver"
-    unless exists $ do
-      shells "wget --quiet --show-progress https://chromedriver.storage.googleapis.com/2.39/chromedriver_linux64.zip" empty
-      shells "unzip chromedriver_linux64.zip && rm chromedriver_linux64.zip" empty
+    with (pushd "scraper") $ \() ->
+        shells "stack build && stack exec scraper" empty
 
 
 deployToGhPages :: IO ()

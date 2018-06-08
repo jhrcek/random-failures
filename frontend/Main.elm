@@ -19,6 +19,7 @@ import Table exposing (defaultCustomizations)
 import Task
 import Time
 import Time.DateTime as DateTime exposing (DateTime, zero)
+import Time.Iso8601
 
 
 main : Program Never Model Msg
@@ -789,13 +790,13 @@ testFailureDecoder =
 
 dateTimeDecoder : Decode.Decoder DateTime
 dateTimeDecoder =
-    Decode.list Decode.int
+    Decode.string
         |> Decode.andThen
-            (\xs ->
-                case xs of
-                    [ yr, mn, d, h, m ] ->
-                        Decode.succeed <| DateTime.dateTime { zero | year = yr, month = mn, day = d, hour = h, minute = m }
+            (\s ->
+                case Time.Iso8601.toDateTime s of
+                    Ok dateTime ->
+                        Decode.succeed dateTime
 
-                    flds ->
-                        Decode.fail <| "Unable to parse DateTime from fields" ++ toString flds
+                    Err err ->
+                        Decode.fail (toString err)
             )
