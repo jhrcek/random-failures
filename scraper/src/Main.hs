@@ -2,8 +2,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import           Conduit              (concatC, concatMapMC, iterMC, mapMC,
-                                       runConduit, sinkList, yieldMany, (.|))
+import           Conduit              (concatC, concatMapMC, filterMC, iterMC,
+                                       mapMC, runConduit, sinkList, yieldMany,
+                                       (.|))
 import qualified Config
 import           Control.Lens         (Fold, filtered, to, (^.), (^..))
 import qualified Data.Aeson           as Aeson
@@ -38,6 +39,7 @@ main = do
         .| iterMC (\(BuildUrl buildUrl, _dateTime) ->
                       Text.putStr $ "    Unstable build #" <> lastUrlComponent buildUrl)
         .| mapMC getTestFailures
+        .| filterMC (ignoreBuildsWithMoreThanFailures 50)
         .| iterMC (\failures -> Text.putStrLn $ " has " <> lengthText failures <> " test failure(s)")
         .| concatC
         .| sinkList
@@ -135,3 +137,12 @@ lastUrlComponent = Text.takeWhileEnd (/='/') . Text.init
 
 lengthText :: [a] -> Text
 lengthText = Text.pack . show . length
+
+ignoreBuildsWithMoreThanFailures :: Int -> [a] -> IO Bool
+ignoreBuildsWithMoreThanFailures limit items =
+    if length items > limit then do
+        Text.putStrLn $ " has " <> lengthText items
+            <> " failures - these won't be included in the final report, because there's more than "
+            <> Text.pack (show limit) <> " of them"
+        return False
+    else return True
