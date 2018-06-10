@@ -2,16 +2,15 @@
 
 The goal of this project is to make it possible to identify flaky tests by analyzing test failure data from kie-jenkins.
 The project consists of 2 parts:
-- simple selenium-based java program which crawls all unstable builds of jobs from [PRs folder](https://kie-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/view/PRs/) of kie-jenkins
- and scrapes test failure data. For each failure it's saving 5 items: job URL, test class name, test method name, date of failure and stack trace.
-- interactive web page report which enables analyzing data scraped by the above script
+- A Haskell program which downloads test results of all unstable builds of jobs from from [PRs view](https://kie-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/view/PRs/) of kie-jenkins. For each failure it saves 5 items: job URL, test class and test method name, stack trace and date of build.
+- A single page Elm application which enables analyzing data scraped by the above script. This is deployed at [janhrcek.cz/random-failures/](http://janhrcek.cz/random-failures/) and updated with new data on weekly basis.
 
 ## Updating the report
 
-Since kie-jenkins is only archiving last 14 days of job runs, it's necessary to periodically (~ once a week) scrape test failure data.
+Since kie-jenkins is only archiving last 14 days of builds, it's necessary to periodically (~ once a week) scrape test failure data.
 The process of scraping has been automated, everything can be done by just running `./cli.sh` at the root of this project. The script will
 1. build and run the scraper program, which outputs all the failures into `frontend/dist/failures.json`
-2. builds and runs the front end report (actually a single-page elm application)
+2. builds and runs the front end report
 3. copies the contents of the `frontend/dist` to the root directory of this repo at `gh-pages` branch
 
 ## Working with the report
