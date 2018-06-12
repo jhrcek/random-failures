@@ -688,10 +688,21 @@ failureRow : ( TestFailure, Color ) -> Html Msg
 failureRow ( { url, date, stackTrace }, color ) =
     tr []
         [ td [] [ text <| formatDateTime date ]
-        , td [] [ a [ href url ] [ text <| String.dropLeft 65 <| String.dropRight 11 url ] ]
+        , td [] [ a [ href url ] [ text <| extractJobNameAndBuildNumber url ] ]
         , td [ style [ ( "background-color", Color.Convert.colorToHex color ) ] ] []
         , td [] [ button [ onClick (ToggleStacktrace stackTrace) ] [ text "Show Stack Trace" ] ]
         ]
+
+
+{-| From URL like "<https://kie-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/view/PRs/job/jbpm-pullrequests/1736/testReport/"">
+Extract "jbpm-pullrequests/1736"
+-}
+extractJobNameAndBuildNumber : String -> String
+extractJobNameAndBuildNumber fullUrl =
+    String.split "/" fullUrl
+        |> List.Extra.takeWhileRight (\piece -> piece /= "job")
+        |> List.take 2
+        |> String.join "/"
 
 
 {-| YYYY-MM-DD HH:mm
