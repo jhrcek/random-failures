@@ -1,6 +1,5 @@
 {-# LANGUAGE DeriveAnyClass    #-}
 {-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 module Failure where
 import           Data.Aeson      (FromJSON, ToJSON, parseJSON, withObject,

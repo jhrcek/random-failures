@@ -9,21 +9,23 @@ copyright:          2018 Jan Hrček
 category:           Web
 extra-source-files:
 - README.md
-
+default-extensions:
+- OverloadedStrings
 dependencies:
-  - aeson
-  - base >= 4.7 && < 5
-  - bytestring
-  - conduit
-  - feed
-  - lens
-  - lens-aeson
-  - text
-  - time
-  - wreq
-  - directory
-  - filepath
-
+- aeson
+- base >= 4.7 && < 5
+- bytestring
+- conduit
+- feed
+- lens
+- lens-aeson
+- text
+- time
+- wreq
+- directory
+- filepath
+- statistics
+- vector
 executables:
   scraper:
     source-dirs:    src

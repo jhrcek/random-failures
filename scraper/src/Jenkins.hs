@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Jenkins
   ( getAllBuilds
   , getBuildNumber
@@ -7,14 +6,15 @@ module Jenkins
   , getMasterPrJobUrls
   , getTestFailures
   , getUnstableBuilds
-  , BuildUrl
+  , BuildUrl(BuildUrl)
   , JobUrl(JobUrl)
   , BuildStats(..)
   , BuildResult(..)
   ) where
 
-
-import           Control.Lens         (Fold, filtered, to, (^.), (^..), (^?))
+import           Control.Lens         (Fold, filtered, to, (^.), (^..))
+import           Data.Aeson           (FromJSON, parseJSON, withObject, (.!=),
+                                       (.:), (.:?))
 import           Data.Aeson.Lens      (key, _Array, _JSON, _Number, _String)
 import           Data.ByteString.Lazy (ByteString)
 import qualified Data.List            as List
@@ -111,20 +111,22 @@ data BuildStats = BuildStats
     , buildResult        :: BuildResult
     } deriving Show
 
-data BuildResult = SUCCESS | FAILURE | UNSTABLE | ABORTED deriving (Eq, Read, Show)
+instance FromJSON BuildStats where
+    parseJSON = withObject "BuildStats" $ \o -> BuildStats
+        <$> o .: "duration"
+        <*> (parseResult <$> o .:? "result" .!= "RUNNING") -- "result": null -> build is still running
+
+data BuildResult = SUCCESS | FAILURE | UNSTABLE | ABORTED | RUNNING deriving (Eq, Read, Show)
 
 getBuildStats :: BuildUrl -> IO BuildStats
 getBuildStats (BuildUrl buildUrl) = do
-    resp <- Wreq.get . Text.unpack $ buildUrl <> "api/json"
-    return $ resp ^. Wreq.responseBody . to extractBuildStats
+    resp <- Wreq.asJSON =<< Wreq.get (Text.unpack (buildUrl <> "api/json"))
+    return $ resp ^. Wreq.responseBody
 
-extractBuildStats :: ByteString -> BuildStats
-extractBuildStats body = buildStats
-  where
-    mayDuration = body ^? key "duration" . _Number . to round
-    mayResult = body ^? key "result" . _String . to (parseResult . Text.unpack)
-    parseResult str = fromMaybe (error $ "Failed to parse BuildResult from " <> str) $ readMaybe str
-    buildStats = fromMaybe (error $ "Failed to textract build stats from " <> show body) $ BuildStats <$> mayDuration <*> mayResult
+parseResult :: Text -> BuildResult
+parseResult text =
+    let str = Text.unpack text
+    in fromMaybe (error $ "Failed to parse BuildResult from " <> str) $ readMaybe str
 
 --------------------------------------------------------------------------------
 {-| Extract test failures from json "testReport" associated with each build -}
