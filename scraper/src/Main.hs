@@ -43,7 +43,7 @@ saveReport reportsDir failures = do
     utcTime <- getCurrentTime
     let reportFileName = "failures_" <> formatTime defaultTimeLocale "%F" utcTime <> ".json"
         reportPath = reportsDir </> reportFileName
-    Text.putStrLn $ "Saving " <> lengthText failures <> " to " <> Text.pack reportPath
+    Text.putStrLn $ "Saving " <> lengthText failures <> " failures to " <> Text.pack reportPath
     BS.writeFile reportPath (Aeson.encode failures)
 --------------------------------------------------------------------------------
 
