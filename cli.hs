@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
--- stack script --resolver lts-11.12 --package turtle
+-- stack script --resolver lts-11.15 --package turtle
 {-# LANGUAGE OverloadedStrings #-}
 import           Prelude hiding (FilePath)
 import           Turtle
