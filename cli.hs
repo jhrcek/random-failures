@@ -67,3 +67,5 @@ deployToGhPages =
         gitCheckout "gh-pages"
         pwd >>= cptree tmpdir
         gitAdd ["failures.json", "js/elm.min.js"]
+        date <- today
+        procs "git" ["commit", "--amend", "-m", "random failures report " <> date] empty
