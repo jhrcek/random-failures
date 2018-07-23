@@ -1,8 +1,8 @@
 #!/usr/bin/env stack
--- stack script --resolver lts-11.15 --package turtle
+-- stack script --resolver lts-12.2 --package turtle
 {-# LANGUAGE OverloadedStrings #-}
-import           Prelude hiding (FilePath)
-import           Turtle
+import Prelude hiding (FilePath)
+import Turtle
 
 main :: IO ()
 main = do
@@ -68,4 +68,6 @@ deployToGhPages =
         pwd >>= cptree tmpdir
         gitAdd ["failures.json", "js/elm.min.js"]
         date <- today
-        procs "git" ["commit", "--amend", "-m", "random failures report " <> date] empty
+        procs "git" ["commit", "-m", "random failures report " <> date] empty
+        shells "git push origin gh-pages" empty
+        gitCheckout "master"

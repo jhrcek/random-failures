@@ -10,8 +10,9 @@ The project consists of 2 parts:
 Since kie-jenkins is only archiving last 14 days of builds, it's necessary to periodically (~ once a week) scrape test failure data.
 The process of scraping has been automated, everything can be done by just running `./cli.sh` at the root of this project. The script will
 1. build and run the scraper program, which outputs all the failures into `frontend/dist/failures.json`
-2. builds and runs the front end report
-3. copies the contents of the `frontend/dist` to the root directory of this repo at `gh-pages` branch
+2. build and runs the front end report
+3. copy the contents of the `frontend/dist` to the root directory of this repo at `gh-pages` branch
+4. push the updated report to the `gh-pages` branch
 
 ## Working with the report
 
