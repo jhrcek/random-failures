@@ -17,3 +17,28 @@ a:link, a:visited {
 a:hover, a:active {
   text-decoration: underline;
 }
+
+.hint-image {
+  width: 15px;
+  height: 15px;
+  margin-left: 4px;
+  margin-right: 4px;
+  margin-bottom: -2px;
+}
+
+.timeline-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  transform: rotate(-45deg);
+  white-space: pre;
+}
+
+.timeline {
+  background-color: lightgray;
+  position: relative;
+  height: 10px;
+  margin-top: 80px;
+  width: 95%;
+}
