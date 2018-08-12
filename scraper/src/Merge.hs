@@ -8,21 +8,30 @@ import qualified Failure              as F
 import qualified System.Directory     as Dir
 import           System.FilePath      ((</>))
 import qualified System.FilePath      as FP
+import Data.Time.Clock (getCurrentTime, nominalDay, addUTCTime)
 
 mergeReports :: FilePath -> IO ()
 mergeReports reportsDir = do
     reports <- listReports reportsDir
     putStrLn $ "Found " <> show (length reports) <> " failure report files. Loading failures..."
     eitherFailures <- traverse loadFailures reports
+    isLessThanHalfYearOld <- createDateFilter
     let failures = either
             (error . ("Something went wrong when loading failures: " <> ))
             concat
             $ sequence eitherFailures
-        uniqueFailures = List.nub failures
+        uniqueFailuresFromLastSixMonths = filter isLessThanHalfYearOld $ List.nub failures
     putStrLn $ show (length failures) <> " failures loaded. Removing duplicates..."
     finalReport <- Dir.makeAbsolute "../frontend/dist/failures.json"
-    BS.writeFile finalReport (Aeson.encode uniqueFailures)
-    putStrLn $ show (length uniqueFailures) <> " unique failures saved to " <> finalReport
+    BS.writeFile finalReport (Aeson.encode uniqueFailuresFromLastSixMonths)
+    putStrLn $ show (length uniqueFailuresFromLastSixMonths) <> " unique failures saved to " <> finalReport
+
+{- Create filter that accepts failures from past 6 months -}
+createDateFilter :: IO (F.TestFailure -> Bool)
+createDateFilter = do
+    now <- getCurrentTime
+    let pastDate = addUTCTime (-(365/2) * nominalDay) now
+    return $ \failure -> F.date failure >= pastDate
 
 listReports :: FilePath -> IO [FilePath]
 listReports reportsDir = do

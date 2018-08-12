@@ -27,13 +27,13 @@ printBuildTimesOfFinishedDownstreamPrJobs = do
               stats <- traverse J.getBuildStats builds
               let finishedBuildDurations = J.buildDurationMilis <$> filter isFinished stats
                   averageDurationMilis = sum finishedBuildDurations `div` genericLength finishedBuildDurations
-              if length finishedBuildDurations > 0
+              if not (null finishedBuildDurations)
                   then Text.putStrLn $ Text.intercalate ","
                           [ "avg = " <> formatDuration averageDurationMilis
                           , "σ = " <> (formatDuration . round . Stat.stdDev . Vect.fromList $ fmap fromIntegral finishedBuildDurations)
                           , "n = " <> Util.lengthText finishedBuildDurations
                           ]
-                  else Text.putStrLn $ "N/A"
+                  else Text.putStrLn "N/A"
             )
       where
         isFinished :: J.BuildStats -> Bool
