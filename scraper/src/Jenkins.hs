@@ -43,19 +43,17 @@ getBuildNumber (BuildUrl url) = lastUrlComponent url
 
 newtype TestReportUrl = TestReportUrl Text
 --------------------------------------------------------------------------------
-{-| Extract list of PR builder job URLs that build from master -}
+{-| Extract URLs of PR builder jobs that build from master branch -}
 getMasterPrJobUrls :: IO [JobUrl]
 getMasterPrJobUrls = do
-    resp <- Wreq.get "https://kie-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/view/PRs/api/json"
-    return $ resp ^. Wreq.responseBody . to extractMasterPrJobUrls
+    resp <- Wreq.get "https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest/api/json"
+    return $ resp ^. Wreq.responseBody . to extractPrJobUrls
 
-extractMasterPrJobUrls :: ByteString -> [JobUrl]
-extractMasterPrJobUrls body =
+extractPrJobUrls :: ByteString -> [JobUrl]
+extractPrJobUrls body =
     fmap JobUrl $ body ^..
           key "jobs" . _Array . traverse
         . key "url" . _String
-        -- focus on master jobs by filtering out URLs ending like "-7.7.x" etc.
-        . filtered (Text.isSuffixOf "-pullrequests/")
 
 --------------------------------------------------------------------------------
 {-| Extract unstable build URLs from Job's "rssFailed" Atom feed -}
