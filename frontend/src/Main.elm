@@ -1,64 +1,66 @@
 module Main exposing (main)
 
+import Browser exposing (Document, UrlRequest(..))
+import Browser.Navigation as Nav exposing (Key)
 import Color exposing (Color)
-import Color.Convert
 import Dict exposing (Dict)
 import Dict.Extra
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
 import Html exposing (Html, a, button, div, h2, h3, img, input, li, strong, table, td, text, textarea, th, tr, ul)
-import Html.Attributes as Attr exposing (checked, cols, href, maxlength, name, rows, src, style, title, type_, value)
+import Html.Attributes as Attr exposing (checked, class, cols, href, maxlength, name, rows, src, style, title, type_, value)
 import Html.Events exposing (onClick, onInput)
-import Http
+import Http exposing (Error(..))
+import Iso8601
 import Json.Decode as Decode
 import List.Extra
-import Navigation
 import Page exposing (ClassAndMethod, Page)
-import RemoteData exposing (RemoteData(Failure, Loading, NotAsked, Success), WebData)
+import RemoteData exposing (RemoteData(..), WebData)
 import Table exposing (defaultCustomizations)
 import Task
-import Time
-import Time.DateTime as DateTime exposing (DateTime, zero)
-import Time.Iso8601
+import Time exposing (Month(..), Posix)
+import Url exposing (Url)
 
 
-main : Program Never Model Msg
+main : Program () Model Msg
 main =
-    Navigation.program UrlChange
+    Browser.application
         { init = init
         , view = view
         , update = update
         , subscriptions = always Sub.none
+        , onUrlRequest = LinkClicked
+        , onUrlChange = UrlChange
         }
 
 
-init : Navigation.Location -> ( Model, Cmd Msg )
-init location =
+init : () -> Url -> Key -> ( Model, Cmd Msg )
+init () url key =
     let
-        ( initialPage, perhapsModifyUrl ) =
-            maybeNavigate location
+        initialPage =
+            Page.fromUrl url
     in
-    ( initialModel initialPage
+    ( initialModel initialPage key
     , Cmd.batch
         [ Task.perform SetNow Time.now
-        , perhapsModifyUrl
         , loadFailures
         ]
     )
 
 
-{-| Ensure that whenever URL is invalid, the App goes back to Home page
--}
-maybeNavigate : Navigation.Location -> ( Page, Cmd Msg )
-maybeNavigate location =
-    case Page.parse location of
-        Just p ->
-            ( p, Cmd.none )
+navigateTo : Url -> Model -> Model
+navigateTo url model =
+    let
+        newPage =
+            Page.fromUrl url
 
-        Nothing ->
-            ( Page.Home
-            , Navigation.modifyUrl <| Page.toUrlHash Page.Home
-            )
+        newClassFilter =
+            Page.toClassFilter newPage
+    in
+    { model
+        | page = newPage
+        , filters = setClassFilter newClassFilter model.filters
+    }
 
 
 loadFailures : Cmd Msg
@@ -68,24 +70,25 @@ loadFailures =
         |> Cmd.map FailuresLoaded
 
 
-initialModel : Page -> Model
-initialModel initialPage =
+initialModel : Page -> Key -> Model
+initialModel initialPage key =
     { groupedFailures = RemoteData.Loading
     , filters =
         { failureCount = 5
-        , dateRange = ( DateTime.epoch, DateTime.epoch )
+        , dateRange = ( epoch, epoch )
         , className = Page.toClassFilter initialPage
         }
     , tableState = Table.initialSort daysSinceLastFailureColumnName
     , page = initialPage
-    , now = DateTime.epoch
+    , now = epoch
     , fqnEnabled = False
+    , navKey = key
     }
 
 
 type alias Filters =
     { failureCount : Int
-    , dateRange : ( DateTime, DateTime )
+    , dateRange : ( Posix, Posix )
     , className : Maybe String
     }
 
@@ -94,62 +97,79 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         ChangeFailureCountFilter failureCountStr ->
-            { model | filters = setFailureCountFilter failureCountStr model.filters } ! []
+            ( { model | filters = setFailureCountFilter failureCountStr model.filters }
+            , Cmd.none
+            )
 
         SetTableState newState ->
-            { model | tableState = newState } ! []
+            ( { model | tableState = newState }
+            , Cmd.none
+            )
 
-        SetNow timestamp ->
-            { model | now = DateTime.fromTimestamp timestamp } ! []
+        SetNow posix ->
+            ( { model | now = posix }
+            , Cmd.none
+            )
 
         ToggleFQN flag ->
-            { model | fqnEnabled = flag } ! []
+            ( { model | fqnEnabled = flag }
+            , Cmd.none
+            )
 
         ToggleStacktrace st ->
             case model.page of
                 Page.MethodDetails classAndMethod _ ->
-                    { model | page = Page.MethodDetails classAndMethod (Just st) } ! []
+                    ( { model | page = Page.MethodDetails classAndMethod (Just st) }
+                    , Cmd.none
+                    )
 
                 _ ->
-                    model ! []
+                    ( model
+                    , Cmd.none
+                    )
 
-        UrlChange location ->
-            let
-                ( newPage, perhapsModifyUrl ) =
-                    maybeNavigate location
+        UrlChange url ->
+            ( navigateTo url model
+            , Cmd.none
+            )
 
-                newClassFilter =
-                    Page.toClassFilter newPage
-            in
-            { model
-                | page = newPage
-                , filters = setClassFilter newClassFilter model.filters
-            }
-                ! [ perhapsModifyUrl ]
+        LinkClicked urlRequest ->
+            case urlRequest of
+                Internal url ->
+                    ( model
+                      -- Push new url to browser history, model is loaded in UrlChange branch
+                    , Page.fromUrl url
+                        |> Page.toUrlHash
+                        |> Nav.pushUrl model.navKey
+                    )
+
+                External url ->
+                    ( model, Nav.load url )
 
         FailuresLoaded failuresRemoteData ->
             let
                 dateRange =
                     RemoteData.map calculateDateRange failuresRemoteData
-                        |> RemoteData.withDefault ( DateTime.epoch, DateTime.epoch )
+                        |> RemoteData.withDefault ( epoch, epoch )
             in
-            { model
+            ( { model
                 | groupedFailures = RemoteData.map groupFailuresByClassAndMethod failuresRemoteData
                 , filters = setDateRangeFilter dateRange model.filters
-            }
-                ! []
+              }
+            , Cmd.none
+            )
 
 
 setFailureCountFilter : String -> Filters -> Filters
 setFailureCountFilter fcStr filters =
     let
         newFailureCount =
-            String.toInt fcStr |> Result.withDefault 1
+            String.toInt fcStr |> Maybe.withDefault 1
     in
     { filters | failureCount = newFailureCount }
 
 
-setDateRangeFilter : ( DateTime, DateTime ) -> Filters -> Filters
+setDateRangeFilter : ( Posix, Posix ) -> Filters -> Filters
 setDateRangeFilter rng filters =
     { filters | dateRange = rng }
 
@@ -159,17 +179,17 @@ setClassFilter maybeClassName filters =
     { filters | className = maybeClassName }
 
 
-calculateDateRange : List TestFailure -> ( DateTime, DateTime )
+calculateDateRange : List TestFailure -> ( Posix, Posix )
 calculateDateRange failures =
     let
-        sortedFailureTimestamps =
-            List.sort <| List.map (DateTime.toTimestamp << .date) failures
+        failureDates =
+            List.map .date failures
 
         oldestDate =
-            DateTime.fromTimestamp <| Maybe.withDefault 0 <| List.minimum sortedFailureTimestamps
+            Maybe.withDefault epoch <| List.Extra.minimumBy Time.posixToMillis failureDates
 
         newestDate =
-            DateTime.fromTimestamp <| Maybe.withDefault 0 <| List.maximum sortedFailureTimestamps
+            Maybe.withDefault epoch <| List.Extra.maximumBy Time.posixToMillis failureDates
     in
     ( oldestDate, newestDate )
 
@@ -177,10 +197,11 @@ calculateDateRange failures =
 type Msg
     = ChangeFailureCountFilter String
     | SetTableState Table.State
-    | SetNow Time.Time
+    | SetNow Posix
     | ToggleFQN Bool
     | ToggleStacktrace String
-    | UrlChange Navigation.Location
+    | UrlChange Url
+    | LinkClicked UrlRequest
     | FailuresLoaded (WebData (List TestFailure))
 
 
@@ -189,14 +210,15 @@ type alias Model =
     , filters : Filters
     , tableState : Table.State
     , page : Page
-    , now : DateTime
+    , now : Posix
     , fqnEnabled : Bool
+    , navKey : Key
     }
 
 
 type alias TestFailure =
     { url : String
-    , date : DateTime
+    , date : Posix
     , testClass : String
     , testMethod : String
     , stackTrace : String
@@ -217,90 +239,93 @@ getMethodName : ClassAndMethod -> String
 getMethodName ( className, methodName ) =
     if className == methodName then
         "JUnit setup method (@Before, @After etc.)"
+
     else
         methodName
 
 
-view : Model -> Html Msg
+view : Model -> Document Msg
 view model =
-    case model.groupedFailures of
-        NotAsked ->
-            -- can't happen as we're beginning in the Loading state
-            div [] [ text "Request to load failures.json wasn't sent" ]
+    let
+        body =
+            case model.groupedFailures of
+                NotAsked ->
+                    -- can't happen as we're beginning in the Loading state
+                    [ text "Request to load failures.json wasn't sent" ]
 
-        Loading ->
-            div [] [ text "Loading data ..." ]
+                Loading ->
+                    [ text "Loading data ..." ]
 
-        Failure e ->
-            div [] [ text <| toString e ]
+                Failure httpError ->
+                    [ text <| showHttpError httpError ]
 
-        Success loadedFailures ->
-            case model.page of
-                Page.Home ->
-                    homeView model
+                Success loadedFailures ->
+                    case model.page of
+                        Page.Home ->
+                            homeView model
 
-                Page.ClassDetails clz ->
-                    classDetailsView clz model
+                        Page.ClassDetails clz ->
+                            classDetailsView clz model
 
-                Page.MethodDetails classAndMethod mSt ->
-                    let
-                        failures =
-                            getSortedFailuresOf classAndMethod loadedFailures
-                    in
-                    if List.isEmpty failures then
-                        classAndMethodNotFoundView classAndMethod
-                    else
-                        failureDetailView classAndMethod failures model.filters.dateRange mSt
+                        Page.MethodDetails classAndMethod mSt ->
+                            let
+                                failures =
+                                    getSortedFailuresOf classAndMethod loadedFailures
+                            in
+                            if List.isEmpty failures then
+                                classAndMethodNotFoundView classAndMethod
+
+                            else
+                                failureDetailView classAndMethod failures model.filters.dateRange mSt
+    in
+    { title = "kiegroup CI Test Failures", body = body }
 
 
-homeView : Model -> Html Msg
+homeView : Model -> List (Html Msg)
 homeView model =
-    div []
-        [ description model.filters.dateRange
-        , filterControls model
-        , h3 [] [ text "Failures (grouped by Class and Test method)" ]
-        , failureSummaryTable model
-        , faq
-        ]
+    [ description model.filters.dateRange
+    , filterControls model
+    , h3 [] [ text "Failures (grouped by Class and Test method)" ]
+    , failureSummaryTable model
+    , faq
+    ]
 
 
-classDetailsView : String -> Model -> Html Msg
+classDetailsView : String -> Model -> List (Html Msg)
 classDetailsView fqcn model =
-    div []
-        [ homeLink
-        , h3 [] [ text <| "Failures in class " ++ fqcn ]
-        , failureSummaryTable model
-        ]
+    [ homeLink
+    , h3 [] [ text <| "Failures in class " ++ fqcn ]
+    , failureSummaryTable model
+    ]
 
 
-classAndMethodNotFoundView : ClassAndMethod -> Html Msg
+classAndMethodNotFoundView : ClassAndMethod -> List (Html Msg)
 classAndMethodNotFoundView ( clz, method ) =
-    div []
-        [ homeLink
-        , h2 [] [ text <| "No failures found" ]
-        , table
-            []
-            [ tr []
-                [ td [] [ strong [] [ text "Class" ] ]
-                , td [] [ text clz ]
-                ]
-            , tr []
-                [ td [] [ strong [] [ text "Method" ] ]
-                , td [] [ text method ]
-                ]
+    [ homeLink
+    , h2 [] [ text <| "No failures found" ]
+    , table
+        []
+        [ tr []
+            [ td [] [ strong [] [ text "Class" ] ]
+            , td [] [ text clz ]
             ]
-        , div [] [ text "Are you sure you've got the class and method name right?" ]
+        , tr []
+            [ td [] [ strong [] [ text "Method" ] ]
+            , td [] [ text method ]
+            ]
         ]
+    , div [] [ text "Are you sure you've got the class and method name right?" ]
+    ]
 
 
-description : ( DateTime, DateTime ) -> Html Msg
+description : ( Posix, Posix ) -> Html Msg
 description ( fromDate, toDate ) =
     div []
         [ h2 [] [ text "Random test failure analysis" ]
         , text "This report was generated on GENERATED_ON_PLACEHOLDER and lists most"
         , helpIcon "Builds with more than 50 test failures are excluded, because they add a lot of data without providing much value for flaky test identification."
         , text "test failures in "
-        , a [ href "https://kie-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/view/PRs/" ] [ text "kie-jenkins PR jobs" ]
+        , a [ href "https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest/" ] [ text "rhba-jenkins PR jobs" ]
         , text <| " (master only) from " ++ formatDate fromDate ++ " to " ++ formatDate toDate ++ "."
         ]
 
@@ -315,8 +340,8 @@ filterControls { filters, fqnEnabled } =
             , Attr.min "0"
             , Attr.max "100"
             , onInput ChangeFailureCountFilter
-            , value (toString filters.failureCount)
-            , style [ ( "width", "50px" ) ]
+            , value (String.fromInt filters.failureCount)
+            , style "width" "50px"
             ]
             []
         , text " or more times"
@@ -374,7 +399,7 @@ faq =
         ]
 
 
-tableConfig : DateTime -> Bool -> Table.Config TableRecord Msg
+tableConfig : Posix -> Bool -> Table.Config TableRecord Msg
 tableConfig now fqnEnabled =
     Table.customConfig
         { toId = \( ( fqcn, method ), _ ) -> fqcn ++ method
@@ -391,7 +416,8 @@ tableConfig now fqnEnabled =
                 | rowAttrs =
                     \( _, fs ) ->
                         if isProbablyRandom fs now then
-                            [ style [ ( "background-color", "salmon" ) ] ]
+                            [ style "background-color" "salmon" ]
+
                         else
                             []
             }
@@ -403,7 +429,7 @@ daysSinceLastFailureColumnName =
     "Days since last failure"
 
 
-isProbablyRandom : List TestFailure -> DateTime -> Bool
+isProbablyRandom : List TestFailure -> Posix -> Bool
 isProbablyRandom fs now =
     let
         lastFailureDaysAgo =
@@ -424,6 +450,7 @@ classColumn fqnEnabled =
         getVisibleClassName ( ( fqcn, _ ), _ ) =
             if fqnEnabled then
                 fqcn
+
             else
                 fqnToSimpleClassName fqcn
 
@@ -474,7 +501,7 @@ stdDevColumn =
         }
 
 
-failureDetailView : ClassAndMethod -> List TestFailure -> ( DateTime, DateTime ) -> Maybe String -> Html Msg
+failureDetailView : ClassAndMethod -> List TestFailure -> ( Posix, Posix ) -> Maybe String -> List (Html Msg)
 failureDetailView classAndMethod sortedFailures dateRange mStackTrace =
     let
         stacktraces =
@@ -484,7 +511,7 @@ failureDetailView classAndMethod sortedFailures dateRange mStackTrace =
             List.Extra.unique stacktraces
 
         uniqueStacktraces =
-            List.Extra.uniqueBy (\st -> String.split "\t" st |> List.tail |> toString) stacktraces
+            List.Extra.uniqueBy (\st -> String.split "\t" st |> List.tail |> Maybe.withDefault [] |> String.concat) stacktraces
 
         maybeStacktraceView =
             Maybe.withDefault (text "") <| Maybe.map stacktraceView mStackTrace
@@ -492,16 +519,15 @@ failureDetailView classAndMethod sortedFailures dateRange mStackTrace =
         colorizedFailures =
             assignColorsToStacktraces sortedFailures
     in
-    div []
-        [ homeLink
-        , h2 [] [ text "Failure details" ]
-        , failureDetailsSummary classAndMethod (List.length sortedFailures) (List.length uniqueStacktracesAndMessages) (List.length uniqueStacktraces)
-        , h3 [] [ text "Spread of failure dates" ]
-        , viewFailureDatesChart dateRange colorizedFailures
-        , h3 [] [ text "Failures" ]
-        , failuresTable colorizedFailures
-        , maybeStacktraceView
-        ]
+    [ homeLink
+    , h2 [] [ text "Failure details" ]
+    , failureDetailsSummary classAndMethod (List.length sortedFailures) (List.length uniqueStacktracesAndMessages) (List.length uniqueStacktraces)
+    , h3 [] [ text "Spread of failure dates" ]
+    , viewFailureDatesChart dateRange colorizedFailures
+    , h3 [] [ text "Failures" ]
+    , failuresTable colorizedFailures
+    , maybeStacktraceView
+    ]
 
 
 homeLink : Html Msg
@@ -570,7 +596,7 @@ failureDetailsSummary (( className, _ ) as classAndMethod) totalFailures uniqueS
             ]
         , tr []
             [ td [] [ strong [] [ text "Total failures" ] ]
-            , td [] [ text <| toString totalFailures ]
+            , td [] [ text <| String.fromInt totalFailures ]
             ]
         , tr []
             [ td []
@@ -579,7 +605,7 @@ failureDetailsSummary (( className, _ ) as classAndMethod) totalFailures uniqueS
                     "Total number unique stack traces including exception message "
                         ++ "(looking at both WHERE the failure occured AND the exception message)"
                 ]
-            , td [] [ text <| toString uniqueStacktracesAndMessagesCount ]
+            , td [] [ text <| String.fromInt uniqueStacktracesAndMessagesCount ]
             ]
         , tr []
             [ td []
@@ -588,7 +614,7 @@ failureDetailsSummary (( className, _ ) as classAndMethod) totalFailures uniqueS
                     "Total number unique stack traces that are different disregarding exception message "
                         ++ "(just looking at WHERE the failure was, ignoring exception message)"
                 ]
-            , td [] [ text <| toString uniqueStacktracesCount ]
+            , td [] [ text <| String.fromInt uniqueStacktracesCount ]
             ]
         ]
 
@@ -609,61 +635,43 @@ stacktraceView stackTrace =
 helpIcon : String -> Html a
 helpIcon helpText =
     img
-        [ src "images/q.png"
+        [ class "hint-image"
+        , src "images/q.png"
         , title helpText
-        , style
-            [ ( "width", "15px" )
-            , ( "height", "15px" )
-            , ( "margin-left", "4px" )
-            , ( "margin-right", "4px" )
-            , ( "margin-bottom", "-2px" )
-            ]
         ]
         []
 
 
-viewFailureDatesChart : ( DateTime, DateTime ) -> List ( TestFailure, Color ) -> Html a
+viewFailureDatesChart : ( Posix, Posix ) -> List ( TestFailure, Color ) -> Html a
 viewFailureDatesChart ( fromDate, toDate ) colorizedFailures =
     let
+        leastTimestamp : Float
         leastTimestamp =
-            DateTime.toTimestamp fromDate
+            toFloat <| Time.posixToMillis fromDate
 
+        biggestTimestamp : Float
         biggestTimestamp =
-            DateTime.toTimestamp toDate
+            toFloat <| Time.posixToMillis toDate
 
+        timestampRange : Float
         timestampRange =
             biggestTimestamp - leastTimestamp
 
-        relativePosition : Float -> Float
+        relativePosition : Int -> Float
         relativePosition t =
-            100 * (t - leastTimestamp) / timestampRange
+            100 * (toFloat t - leastTimestamp) / timestampRange
     in
     List.map
         (\( failure, color ) ->
             div
-                [ style
-                    [ ( "width", "10px" )
-                    , ( "height", "10px" )
-                    , ( "border-radius", "5px" )
-                    , ( "position", "absolute" )
-                    , ( "background-color", Color.Convert.colorToHex color )
-                    , ( "left", toString (relativePosition (DateTime.toTimestamp failure.date)) ++ "%" )
-                    , ( "transform", "rotate(-45deg)" )
-                    , ( "white-space", "pre" )
-                    ]
+                [ class "timeline-dot"
+                , style "background-color" (colorToHtml color)
+                , style "left" (String.fromFloat (relativePosition (Time.posixToMillis failure.date)) ++ "%")
                 ]
                 [ text <| "   " ++ formatDateTime failure.date ]
         )
         colorizedFailures
-        |> div
-            [ style
-                [ ( "background-color", "lightgray" )
-                , ( "position", "relative" )
-                , ( "height", "10px" )
-                , ( "margin-top", "80px" )
-                , ( "width", "95%" )
-                ]
-            ]
+        |> div [ class "timeline" ]
 
 
 getSortedFailuresOf : ClassAndMethod -> GroupedFailures -> List TestFailure
@@ -690,19 +698,20 @@ failureRow ( { url, date, stackTrace }, color ) =
         buildLinkOrNA =
             if String.isEmpty url then
                 text "N/A"
+
             else
                 a [ href url ] [ text <| extractJobNameAndBuildNumber url ]
     in
     tr []
         [ td [] [ text <| formatDateTime date ]
         , td [] [ buildLinkOrNA ]
-        , td [ style [ ( "background-color", Color.Convert.colorToHex color ) ] ] []
+        , td [ style "background-color" (colorToHtml color) ] []
         , td [] [ button [ onClick (ToggleStacktrace stackTrace) ] [ text "Show Stack Trace" ] ]
         ]
 
 
-{-| From URL like "<https://kie-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/view/PRs/job/jbpm-pullrequests/1736/testReport/"">
-Extract "jbpm-pullrequests/1736"
+{-| From URL like "<https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest/job/drools-downstream-pullrequests/12/testReport">
+Extract "drools-downstream-pullrequests/12"
 -}
 extractJobNameAndBuildNumber : String -> String
 extractJobNameAndBuildNumber fullUrl =
@@ -714,50 +723,78 @@ extractJobNameAndBuildNumber fullUrl =
 
 {-| YYYY-MM-DD HH:mm
 -}
-formatDateTime : DateTime -> String
-formatDateTime =
+formatDateTime : Posix -> String
+formatDateTime posix =
     let
         pad =
-            String.padLeft 2 '0' << toString
+            String.padLeft 2 '0' << String.fromInt
     in
-    DateTime.toTuple
-        >> (\( year, month, day, hour, minute, _, _ ) ->
-                toString year
-                    ++ "-"
-                    ++ pad month
-                    ++ "-"
-                    ++ pad day
-                    ++ " "
-                    ++ pad hour
-                    ++ ":"
-                    ++ pad minute
-           )
+    formatDate posix
+        ++ " "
+        ++ pad (Time.toHour Time.utc posix)
+        ++ ":"
+        ++ pad (Time.toHour Time.utc posix)
 
 
 {-| YYYY-MM-DD
 -}
-formatDate : DateTime -> String
-formatDate =
+formatDate : Posix -> String
+formatDate posix =
+    String.join "-"
+        [ Time.toYear Time.utc posix |> String.fromInt
+        , Time.toMonth Time.utc posix |> monthNumber
+        , Time.toDay Time.utc posix |> String.fromInt |> String.padLeft 2 '0'
+        ]
+
+
+monthNumber : Month -> String
+monthNumber month =
+    case month of
+        Jan ->
+            "01"
+
+        Feb ->
+            "02"
+
+        Mar ->
+            "03"
+
+        Apr ->
+            "04"
+
+        May ->
+            "05"
+
+        Jun ->
+            "06"
+
+        Jul ->
+            "07"
+
+        Aug ->
+            "08"
+
+        Sep ->
+            "09"
+
+        Oct ->
+            "10"
+
+        Nov ->
+            "11"
+
+        Dec ->
+            "12"
+
+
+daysSinceLastFailure : List TestFailure -> Posix -> Int
+daysSinceLastFailure failures posixNow =
     let
-        pad =
-            String.padLeft 2 '0' << toString
+        daysFromNow posixPast =
+            Time.posixToMillis posixNow - Time.posixToMillis posixPast |> toFloat |> millisToDays |> round
     in
-    DateTime.toTuple
-        >> (\( year, month, day, _, _, _, _ ) ->
-                toString year
-                    ++ "-"
-                    ++ pad month
-                    ++ "-"
-                    ++ pad day
-           )
-
-
-daysSinceLastFailure : List TestFailure -> DateTime -> Int
-daysSinceLastFailure failures now =
-    -- assuming failures are sorted by failure date
-    List.reverse failures
-        |> List.head
-        |> Maybe.map (.date >> DateTime.delta now >> .days)
+    List.Extra.maximumBy (.date >> Time.posixToMillis) failures
+        |> Maybe.map (\lastFailure -> daysFromNow lastFailure.date)
         |> Maybe.withDefault 0
 
 
@@ -771,50 +808,86 @@ failureListDecoder =
     Decode.list testFailureDecoder
 
 
-standardDeviation : List DateTime -> Float
+standardDeviation : List Posix -> Float
 standardDeviation dts =
     let
+        ts : List Int
         ts =
-            List.map DateTime.toTimestamp dts
+            List.map Time.posixToMillis dts
 
+        len : Float
         len =
             toFloat <| List.length ts
 
+        avg : Float
         avg =
-            List.sum ts / len
+            toFloat (List.sum ts) / len
 
+        summedSquares : Float
         summedSquares =
-            List.sum <| List.map (\x -> (x - avg) ^ 2) ts
+            List.sum <| List.map (\x -> (toFloat x - avg) ^ 2) ts
     in
-    (\hours -> hours / 24) <| Time.inHours <| sqrt <| summedSquares / len
+    millisToDays <| sqrt <| summedSquares / len
+
+
+millisToDays : Float -> Float
+millisToDays millis =
+    millis / (24 * 60 * 60 * 1000)
 
 
 groupFailuresByClassAndMethod : List TestFailure -> GroupedFailures
 groupFailuresByClassAndMethod =
     Dict.Extra.groupBy (\failure -> ( failure.testClass, failure.testMethod ))
         -- sort by failure date from oldest to most recent
-        >> Dict.map (\_ failures -> List.sortBy (DateTime.toTimestamp << .date) failures)
+        >> Dict.map (\_ failures -> List.sortBy (Time.posixToMillis << .date) failures)
 
 
 testFailureDecoder : Decode.Decoder TestFailure
 testFailureDecoder =
     Decode.map5 TestFailure
         (Decode.field "url" Decode.string)
-        (Decode.field "date" dateTimeDecoder)
+        (Decode.field "date" Iso8601.decoder)
         (Decode.field "testClass" Decode.string)
         (Decode.field "testMethod" Decode.string)
         (Decode.field "stackTrace" Decode.string)
 
 
-dateTimeDecoder : Decode.Decoder DateTime
-dateTimeDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\s ->
-                case Time.Iso8601.toDateTime s of
-                    Ok dateTime ->
-                        Decode.succeed dateTime
+epoch : Posix
+epoch =
+    Time.millisToPosix 0
 
-                    Err err ->
-                        Decode.fail (toString err)
-            )
+
+colorToHtml : Color -> String
+colorToHtml color =
+    let
+        { red, green, blue } =
+            Color.toRgb color
+    in
+    "RGB("
+        ++ String.fromInt red
+        ++ ","
+        ++ String.fromInt green
+        ++ ","
+        ++ String.fromInt blue
+        ++ ")"
+
+
+showHttpError : Http.Error -> String
+showHttpError error =
+    "Http Error : "
+        ++ (case error of
+                BadUrl x ->
+                    "Bad Url : " ++ x
+
+                Timeout ->
+                    "Time"
+
+                NetworkError ->
+                    "NetworkError"
+
+                BadStatus _ ->
+                    "BadStatus"
+
+                BadPayload _ _ ->
+                    "BadPayload"
+           )

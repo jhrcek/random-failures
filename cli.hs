@@ -25,7 +25,7 @@ gitAdd files =
 buildFrontend :: IO ()
 buildFrontend =
     with (pushd "frontend") $ \() -> do
-        shells "elm make --yes --warn Main.elm --output=dist/js/elm.js" empty
+        shells "elm make --optimize src/Main.elm --output=dist/js/elm.js" empty
         addGeneratedOnInfo
         minifyJs
 
@@ -44,7 +44,7 @@ minifyJs :: IO ()
 minifyJs = do
     maybeUglifyPath <- which "uglifyjs"
     when (maybeUglifyPath == Nothing) installUglifyjs
-    shells "uglifyjs dist/js/elm.js --compress 'pure_funcs=\"F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9\",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output=dist/js/elm.min.js" empty
+    shells "uglifyjs dist/js/elm.js --compress 'pure_funcs=\"F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9\",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output=dist/js/elm.js" empty
 
 installUglifyjs :: IO ()
 installUglifyjs = do
@@ -64,8 +64,9 @@ deployToGhPages =
     with (mktempdir "/tmp" "random-failures") $ \tmpdir -> do
         cptree "frontend/dist" tmpdir
         gitCheckout "gh-pages"
+        shells "git clean -df" empty
         pwd >>= cptree tmpdir
-        gitAdd ["failures.json", "js/elm.min.js"]
+        gitAdd ["index.html", "failures.json", "js/elm.js", "css/style.css"]
         date <- today
         procs "git" ["commit", "-m", "random failures report " <> date] empty
         shells "git push origin gh-pages" empty
