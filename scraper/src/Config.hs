@@ -2,4 +2,4 @@ module Config (getReportsDir) where
 import           System.Environment (getEnv)
 
 getReportsDir :: IO FilePath
-getReportsDir = (++ "/Dropbox/Projects/randomFailuresAnalysis/") <$> getEnv "HOME"
+getReportsDir = (++ "/Dropbox/Projects/random-failures/") <$> getEnv "HOME"

@@ -676,7 +676,7 @@ failuresTable colorizedFailures =
     table [] <|
         [ tr []
             [ th [] [ text "Failed on" ]
-            , th [] [ text "Build URL", helpIcon "Some of the job links might be dead, because archived jobs are deleted after some time" ]
+            , th [] [ text "Build URL", helpIcon "Some build URLs are no longer available, because archived jobs are deleted after some time (usually a week)" ]
             , th [] [ text "Unique Stack Trace" ]
             , th [] [ text "Action" ]
             ]
@@ -686,9 +686,16 @@ failuresTable colorizedFailures =
 
 failureRow : ( TestFailure, Color ) -> Html Msg
 failureRow ( { url, date, stackTrace }, color ) =
+    let
+        buildLinkOrNA =
+            if String.isEmpty url then
+                text "N/A"
+            else
+                a [ href url ] [ text <| extractJobNameAndBuildNumber url ]
+    in
     tr []
         [ td [] [ text <| formatDateTime date ]
-        , td [] [ a [ href url ] [ text <| extractJobNameAndBuildNumber url ] ]
+        , td [] [ buildLinkOrNA ]
         , td [ style [ ( "background-color", Color.Convert.colorToHex color ) ] ] []
         , td [] [ button [ onClick (ToggleStacktrace stackTrace) ] [ text "Show Stack Trace" ] ]
         ]

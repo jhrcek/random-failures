@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
--- stack script --resolver lts-12.6 --package turtle
+-- stack script --resolver lts-12.9 --package turtle
 {-# LANGUAGE OverloadedStrings #-}
 import Prelude hiding (FilePath)
 import Turtle
@@ -44,6 +44,7 @@ minifyJs :: IO ()
 minifyJs = do
     maybeUglifyPath <- which "uglifyjs"
     when (maybeUglifyPath == Nothing) installUglifyjs
+    -- TODO better command for minification of elm js code after migration to 0.19
     shells "uglifyjs dist/js/elm.js --compress --mangle --output dist/js/elm.min.js" empty
 
 
