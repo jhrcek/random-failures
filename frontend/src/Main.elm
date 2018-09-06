@@ -7,7 +7,7 @@ import Dict exposing (Dict)
 import Dict.Extra
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, a, button, div, h2, h3, img, input, li, strong, table, td, text, textarea, th, tr, ul)
+import Html exposing (Html, a, button, div, h2, h3, img, input, li, pre, span, strong, table, td, text, th, tr, ul)
 import Html.Attributes as Attr exposing (checked, class, cols, href, maxlength, name, rows, src, style, title, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Http exposing (Error(..))
@@ -116,17 +116,15 @@ update msg model =
             , Cmd.none
             )
 
-        ToggleStacktrace st ->
-            case model.page of
-                Page.MethodDetails classAndMethod _ ->
-                    ( { model | page = Page.MethodDetails classAndMethod (Just st) }
-                    , Cmd.none
-                    )
+        ShowStackTrace st ->
+            ( setStackTrace (Just st) model
+            , Cmd.none
+            )
 
-                _ ->
-                    ( model
-                    , Cmd.none
-                    )
+        HideStackTrace ->
+            ( setStackTrace Nothing model
+            , Cmd.none
+            )
 
         UrlChange url ->
             ( navigateTo url model
@@ -158,6 +156,16 @@ update msg model =
               }
             , Cmd.none
             )
+
+
+setStackTrace : Maybe String -> Model -> Model
+setStackTrace maybeStackTrace model =
+    case model.page of
+        Page.MethodDetails classAndMethod _ ->
+            { model | page = Page.MethodDetails classAndMethod maybeStackTrace }
+
+        _ ->
+            model
 
 
 setFailureCountFilter : String -> Filters -> Filters
@@ -199,7 +207,8 @@ type Msg
     | SetTableState Table.State
     | SetNow Posix
     | ToggleFQN Bool
-    | ToggleStacktrace String
+    | ShowStackTrace String
+    | HideStackTrace
     | UrlChange Url
     | LinkClicked UrlRequest
     | FailuresLoaded (WebData (List TestFailure))
@@ -621,14 +630,12 @@ failureDetailsSummary (( className, _ ) as classAndMethod) totalFailures uniqueS
 
 stacktraceView : String -> Html Msg
 stacktraceView stackTrace =
-    div []
-        [ h3 [] [ text "Stack Trace" ]
-        , textarea
-            [ value stackTrace
-            , cols 160
-            , rows <| 1 + List.length (String.lines stackTrace)
+    div [ class "stacktrace" ]
+        [ h3 [ style "margin-top" "0px" ]
+            [ text "Stack Trace"
+            , span [ class "stacktrace-closer", onClick HideStackTrace ] [ text "×" ]
             ]
-            []
+        , pre [] [ text stackTrace ]
         ]
 
 
@@ -681,15 +688,17 @@ getSortedFailuresOf classAndMethod =
 
 failuresTable : List ( TestFailure, Color ) -> Html Msg
 failuresTable colorizedFailures =
-    table [] <|
-        [ tr []
-            [ th [] [ text "Failed on" ]
-            , th [] [ text "Build URL", helpIcon "Some build URLs are no longer available, because archived jobs are deleted after some time (usually a week)" ]
-            , th [] [ text "Unique Stack Trace" ]
-            , th [] [ text "Action" ]
-            ]
+    table [] (failuresTableHeaderRow :: List.map failureRow colorizedFailures)
+
+
+failuresTableHeaderRow : Html a
+failuresTableHeaderRow =
+    tr []
+        [ th [] [ text "Failed on" ]
+        , th [] [ text "Build URL", helpIcon "Some build URLs are no longer available, because archived jobs are deleted after some time (usually a week)" ]
+        , th [] [ text "Unique Stack Trace" ]
+        , th [] [ text "Action" ]
         ]
-            ++ List.map failureRow colorizedFailures
 
 
 failureRow : ( TestFailure, Color ) -> Html Msg
@@ -706,7 +715,7 @@ failureRow ( { url, date, stackTrace }, color ) =
         [ td [] [ text <| formatDateTime date ]
         , td [] [ buildLinkOrNA ]
         , td [ style "background-color" (colorToHtml color) ] []
-        , td [] [ button [ onClick (ToggleStacktrace stackTrace) ] [ text "Show Stack Trace" ] ]
+        , td [] [ button [ onClick (ShowStackTrace stackTrace) ] [ text "Show Stack Trace" ] ]
         ]
 
 
@@ -885,8 +894,8 @@ showHttpError error =
                 NetworkError ->
                     "NetworkError"
 
-                BadStatus _ ->
-                    "BadStatus"
+                BadStatus { url, status } ->
+                    "BadStatus { code = " ++ String.fromInt status.code ++ ", message = " ++ status.message ++ ", url = " ++ url ++ " }"
 
                 BadPayload _ _ ->
                     "BadPayload"
