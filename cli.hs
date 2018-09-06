@@ -17,11 +17,6 @@ gitCheckout branch =
     procs "git" ["checkout", branch] empty
 
 
-gitAdd :: [FilePath] -> IO ()
-gitAdd files =
-    procs "git" ("add" : fmap (format fp) files) empty
-
-
 buildFrontend :: IO ()
 buildFrontend =
     with (pushd "frontend") $ \() -> do
@@ -48,7 +43,7 @@ minifyJs = do
 
 installUglifyjs :: IO ()
 installUglifyjs = do
-    let command = "sudo npm --global install uglify-js"
+    let command = "sudo npm install uglify-js --global"
     echo . unsafeTextToLine $ "uglifyjs is not installed. Installing it using: " <> command
     shells command empty
 
@@ -66,8 +61,7 @@ deployToGhPages =
         gitCheckout "gh-pages"
         shells "git clean -df" empty
         pwd >>= cptree tmpdir
-        gitAdd ["index.html", "failures.json", "js/elm.js", "css/style.css"]
         date <- today
-        procs "git" ["commit", "-m", "random failures report " <> date] empty
+        procs "git" ["commit", "--all", "-m", "random failures report " <> date] empty
         shells "git push origin gh-pages" empty
         gitCheckout "master"
