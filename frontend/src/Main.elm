@@ -273,8 +273,8 @@ view model =
                         Page.Home ->
                             homeView model
 
-                        Page.ClassDetails clz ->
-                            classDetailsView clz model
+                        Page.ClassDetails fqcn ->
+                            classDetailsView fqcn model
 
                         Page.MethodDetails classAndMethod mSt ->
                             let
@@ -466,7 +466,7 @@ classColumn fqnEnabled =
         classDetailsLink (( ( fqcn, _ ), _ ) as record) =
             { attributes = []
             , children =
-                [ a [ href (Page.toUrlHash (Page.ClassDetails fqcn)) ]
+                [ a [ href <| Page.toUrlHash <| Page.ClassDetails fqcn ]
                     [ text <| getVisibleClassName record
                     ]
                 ]
@@ -593,11 +593,14 @@ stacktraceColors =
 
 
 failureDetailsSummary : ClassAndMethod -> Int -> Int -> Int -> Html Msg
-failureDetailsSummary (( className, _ ) as classAndMethod) totalFailures uniqueStacktracesAndMessagesCount uniqueStacktracesCount =
+failureDetailsSummary (( fqcn, _ ) as classAndMethod) totalFailures uniqueStacktracesAndMessagesCount uniqueStacktracesCount =
     table []
         [ tr []
             [ td [] [ strong [] [ text "Class" ] ]
-            , td [] [ text className ]
+            , td []
+                [ a [ href <| Page.toUrlHash <| Page.ClassDetails fqcn ]
+                    [ text fqcn ]
+                ]
             ]
         , tr []
             [ td [] [ strong [] [ text "Method" ] ]

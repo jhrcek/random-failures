@@ -29,11 +29,11 @@ toUrlHash page =
                 Home ->
                     []
 
-                ClassDetails clz ->
-                    [ "class", clz ]
+                ClassDetails fqcn ->
+                    [ "class", fqcn ]
 
-                MethodDetails ( clz, method ) _ ->
-                    [ "class", clz, "method", method ]
+                MethodDetails ( fqcn, method ) _ ->
+                    [ "class", fqcn, "method", method ]
     in
     "#/" ++ String.join "/" pieces
 
@@ -71,8 +71,8 @@ fromUrl url =
 toClassFilter : Page -> Maybe String
 toClassFilter page =
     case page of
-        ClassDetails clz ->
-            Just clz
+        ClassDetails fqcn ->
+            Just fqcn
 
         Home ->
             Nothing
