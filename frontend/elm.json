@@ -17,7 +17,9 @@
             "elm/url": "1.0.0",
             "elm-community/dict-extra": "2.3.1",
             "elm-community/list-extra": "8.0.0",
+            "jinjor/elm-diff": "1.0.5",
             "krisajenkins/remotedata": "5.0.0",
+            "mdgriffith/elm-ui": "1.0.0",
             "rtfeldman/elm-iso8601-date-strings": "1.1.2",
             "the-sett/elm-color": "1.0.0"
         },

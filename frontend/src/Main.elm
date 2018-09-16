@@ -1,23 +1,29 @@
 module Main exposing (main)
 
 import Browser exposing (Document, UrlRequest(..))
+import Browser.Dom
+import Browser.Events
 import Browser.Navigation as Nav exposing (Key)
 import Color exposing (Color)
 import Dict exposing (Dict)
-import Dict.Extra
+import Element as El
+import Element.Background as Background
+import Element.Border as Border
+import Element.Events as Events
+import Element.Font as Font
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
 import Html exposing (Html, a, button, div, h2, h3, img, input, li, pre, span, strong, table, td, text, th, tr, ul)
 import Html.Attributes as Attr exposing (checked, class, cols, href, maxlength, name, rows, src, style, title, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Http exposing (Error(..))
-import Iso8601
-import Json.Decode as Decode
 import List.Extra
-import Page exposing (ClassAndMethod, Page)
+import Page exposing (Page)
 import RemoteData exposing (RemoteData(..), WebData)
+import StacktraceDiff
 import Table exposing (defaultCustomizations)
 import Task
+import TestFailure exposing (ClassAndMethod, GroupedFailures, StackTrace(..), StackTraceMode(..), TestFailure, getStackTrace, stackTraceToString)
 import Time exposing (Month(..), Posix)
 import Url exposing (Url)
 
@@ -28,10 +34,15 @@ main =
         { init = init
         , view = view
         , update = update
-        , subscriptions = always Sub.none
+        , subscriptions = subscriptions
         , onUrlRequest = LinkClicked
         , onUrlChange = UrlChange
         }
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    Browser.Events.onResize (\w h -> SetViewPort (ViewPort (toFloat w) (toFloat h)))
 
 
 init : () -> Url -> Key -> ( Model, Cmd Msg )
@@ -44,6 +55,7 @@ init () url key =
     , Cmd.batch
         [ Task.perform SetNow Time.now
         , loadFailures
+        , Task.perform SetDomViewPort Browser.Dom.getViewport
         ]
     )
 
@@ -65,7 +77,7 @@ navigateTo url model =
 
 loadFailures : Cmd Msg
 loadFailures =
-    Http.get "failures.json" failureListDecoder
+    Http.get "failures.json" TestFailure.listDecoder
         |> RemoteData.sendRequest
         |> Cmd.map FailuresLoaded
 
@@ -83,6 +95,14 @@ initialModel initialPage key =
     , now = epoch
     , fqnEnabled = False
     , navKey = key
+    , viewport = initialViewPort
+    }
+
+
+initialViewPort : ViewPort
+initialViewPort =
+    { width = 1920
+    , height = 1080
     }
 
 
@@ -116,13 +136,8 @@ update msg model =
             , Cmd.none
             )
 
-        ShowStackTrace st ->
-            ( setStackTrace (Just st) model
-            , Cmd.none
-            )
-
-        HideStackTrace ->
-            ( setStackTrace Nothing model
+        SetStackTraceMode mode ->
+            ( setStackTrace mode model
             , Cmd.none
             )
 
@@ -151,18 +166,31 @@ update msg model =
                         |> RemoteData.withDefault ( epoch, epoch )
             in
             ( { model
-                | groupedFailures = RemoteData.map groupFailuresByClassAndMethod failuresRemoteData
+                | groupedFailures = RemoteData.map TestFailure.groupByClassAndMethod failuresRemoteData
                 , filters = setDateRangeFilter dateRange model.filters
               }
             , Cmd.none
             )
 
+        SetDomViewPort domViewPort ->
+            ( { model
+                | viewport =
+                    { height = domViewPort.viewport.height
+                    , width = domViewPort.viewport.width
+                    }
+              }
+            , Cmd.none
+            )
 
-setStackTrace : Maybe String -> Model -> Model
-setStackTrace maybeStackTrace model =
+        SetViewPort wp ->
+            ( { model | viewport = wp }, Cmd.none )
+
+
+setStackTrace : StackTraceMode -> Model -> Model
+setStackTrace stackTraceMode model =
     case model.page of
         Page.MethodDetails classAndMethod _ ->
-            { model | page = Page.MethodDetails classAndMethod maybeStackTrace }
+            { model | page = Page.MethodDetails classAndMethod stackTraceMode }
 
         _ ->
             model
@@ -207,11 +235,12 @@ type Msg
     | SetTableState Table.State
     | SetNow Posix
     | ToggleFQN Bool
-    | ShowStackTrace String
-    | HideStackTrace
+    | SetStackTraceMode StackTraceMode
     | UrlChange Url
     | LinkClicked UrlRequest
     | FailuresLoaded (WebData (List TestFailure))
+    | SetDomViewPort Browser.Dom.Viewport
+    | SetViewPort ViewPort
 
 
 type alias Model =
@@ -222,24 +251,16 @@ type alias Model =
     , now : Posix
     , fqnEnabled : Bool
     , navKey : Key
+    , viewport : ViewPort
     }
-
-
-type alias TestFailure =
-    { url : String
-    , date : Posix
-    , testClass : String
-    , testMethod : String
-    , stackTrace : String
-    }
-
-
-type alias GroupedFailures =
-    Dict ClassAndMethod (List TestFailure)
 
 
 type alias TableRecord =
     ( ClassAndMethod, List TestFailure )
+
+
+type alias ViewPort =
+    { width : Float, height : Float }
 
 
 {-| When the failure comes from setup method (@Before, @After etc), Jenkins uses class name as method name
@@ -276,7 +297,7 @@ view model =
                         Page.ClassDetails fqcn ->
                             classDetailsView fqcn model
 
-                        Page.MethodDetails classAndMethod mSt ->
+                        Page.MethodDetails classAndMethod stackTraceMode ->
                             let
                                 failures =
                                     getSortedFailuresOf classAndMethod loadedFailures
@@ -285,7 +306,7 @@ view model =
                                 classAndMethodNotFoundView classAndMethod
 
                             else
-                                failureDetailView classAndMethod failures model.filters.dateRange mSt
+                                failureDetailView classAndMethod failures model.filters.dateRange stackTraceMode model.viewport
     in
     { title = "kiegroup CI Test Failures", body = body }
 
@@ -418,7 +439,7 @@ tableConfig now fqnEnabled =
             , methodColumn
             , Table.intColumn "Failures" (\( ( _, _ ), fs ) -> List.length fs)
             , stdDevColumn
-            , Table.intColumn daysSinceLastFailureColumnName (\( _, fs ) -> daysSinceLastFailure fs now)
+            , Table.intColumn daysSinceLastFailureColumnName (\( _, fs ) -> TestFailure.daysSinceLastFailure fs now)
             ]
         , customizations =
             { defaultCustomizations
@@ -442,10 +463,10 @@ isProbablyRandom : List TestFailure -> Posix -> Bool
 isProbablyRandom fs now =
     let
         lastFailureDaysAgo =
-            daysSinceLastFailure fs now
+            TestFailure.daysSinceLastFailure fs now
 
         failureDatesStdDev =
-            standardDeviation <| List.map .date fs
+            TestFailure.standardDeviation <| List.map .date fs
 
         failureCount =
             List.length fs
@@ -485,7 +506,7 @@ methodColumn =
         detailsLink ( classAndMethod, _ ) =
             { attributes = []
             , children =
-                [ a [ href (Page.toUrlHash (Page.MethodDetails classAndMethod Nothing)) ]
+                [ a [ href (Page.toUrlHash (Page.MethodDetails classAndMethod NoStackTrace)) ]
                     [ text <| getMethodName classAndMethod ]
                 ]
             }
@@ -501,7 +522,7 @@ stdDevColumn : Table.Column TableRecord Msg
 stdDevColumn =
     let
         getDeviation ( _, fs ) =
-            standardDeviation <| List.map .date fs
+            TestFailure.standardDeviation <| List.map .date fs
     in
     Table.customColumn
         { name = "Spread of failure dates *"
@@ -510,11 +531,11 @@ stdDevColumn =
         }
 
 
-failureDetailView : ClassAndMethod -> List TestFailure -> ( Posix, Posix ) -> Maybe String -> List (Html Msg)
-failureDetailView classAndMethod sortedFailures dateRange mStackTrace =
+failureDetailView : ClassAndMethod -> List TestFailure -> ( Posix, Posix ) -> StackTraceMode -> ViewPort -> List (Html Msg)
+failureDetailView classAndMethod sortedFailures dateRange stackTraceMode viewport =
     let
         stacktraces =
-            List.map .stackTrace sortedFailures
+            List.map getStackTrace sortedFailures
 
         uniqueStacktracesAndMessages =
             List.Extra.unique stacktraces
@@ -522,11 +543,8 @@ failureDetailView classAndMethod sortedFailures dateRange mStackTrace =
         uniqueStacktraces =
             List.Extra.uniqueBy (\st -> String.split "\t" st |> List.tail |> Maybe.withDefault [] |> String.concat) stacktraces
 
-        maybeStacktraceView =
-            Maybe.withDefault (text "") <| Maybe.map stacktraceView mStackTrace
-
         colorizedFailures =
-            assignColorsToStacktraces sortedFailures
+            TestFailure.assignColorsToStacktraces sortedFailures
     in
     [ homeLink
     , h2 [] [ text "Failure details" ]
@@ -534,62 +552,14 @@ failureDetailView classAndMethod sortedFailures dateRange mStackTrace =
     , h3 [] [ text "Spread of failure dates" ]
     , viewFailureDatesChart dateRange colorizedFailures
     , h3 [] [ text "Failures" ]
-    , failuresTable colorizedFailures
-    , maybeStacktraceView
+    , failuresTable stackTraceMode colorizedFailures
+    , stackTraceView stackTraceMode viewport
     ]
 
 
 homeLink : Html Msg
 homeLink =
     a [ href (Page.toUrlHash Page.Home) ] [ text "<< home" ]
-
-
-assignColorsToStacktraces : List TestFailure -> List ( TestFailure, Color )
-assignColorsToStacktraces failures =
-    let
-        stacktraceToColor : Dict String Color
-        stacktraceToColor =
-            List.map .stackTrace failures
-                |> List.Extra.unique
-                |> (\uniqueStacktraces -> List.map2 (\st color -> ( st, color )) uniqueStacktraces stacktraceColors)
-                |> Dict.fromList
-
-        assignColor : TestFailure -> Color
-        assignColor f =
-            Dict.get f.stackTrace stacktraceToColor |> Maybe.withDefault Color.white
-    in
-    List.map (\f -> ( f, assignColor f )) failures
-
-
-stacktraceColors : List Color
-stacktraceColors =
-    [ Color.lightRed
-    , Color.lightOrange
-    , Color.lightYellow
-    , Color.lightGreen
-    , Color.lightBlue
-    , Color.lightPurple
-    , Color.lightBrown
-    , Color.darkRed
-    , Color.darkOrange
-    , Color.darkYellow
-    , Color.darkGreen
-    , Color.darkBlue
-    , Color.darkPurple
-    , Color.darkBrown
-    , Color.red
-    , Color.orange
-    , Color.yellow
-    , Color.green
-    , Color.blue
-    , Color.purple
-    , Color.brown
-    , Color.grey
-    , Color.darkGrey
-    , Color.lightCharcoal
-    , Color.charcoal
-    , Color.darkCharcoal
-    ]
 
 
 failureDetailsSummary : ClassAndMethod -> Int -> Int -> Int -> Html Msg
@@ -631,15 +601,124 @@ failureDetailsSummary (( fqcn, _ ) as classAndMethod) totalFailures uniqueStackt
         ]
 
 
-stacktraceView : String -> Html Msg
-stacktraceView stackTrace =
-    div [ class "stacktrace" ]
-        [ h3 [ style "margin-top" "0px" ]
-            [ text "Stack Trace"
-            , span [ class "stacktrace-closer", onClick HideStackTrace ] [ text "×" ]
-            ]
-        , pre [] [ text stackTrace ]
+stackTraceView : StackTraceMode -> ViewPort -> Html Msg
+stackTraceView stackTraceMode viewport =
+    let
+        closeModal =
+            onClick (SetStackTraceMode NoStackTrace)
+    in
+    case stackTraceMode of
+        NoStackTrace ->
+            text ""
+
+        ShowStackTrace stackTrace ->
+            stackTraceModal viewport
+                (El.text "Stack Trace")
+                (El.text <| stackTraceToString stackTrace)
+
+        OneStackTracePicked _ ->
+            text ""
+
+        TwoStackTracesPicked ( stackTrace1, color1 ) ( stackTrace2, color2 ) ->
+            stackTraceModal viewport
+                (El.row []
+                    [ El.text "Stack Trace Comparison "
+                    , colorBlock stackTrace1 color1
+                    , El.text " vs "
+                    , colorBlock stackTrace2 color2
+                    ]
+                )
+                (StacktraceDiff.diffView
+                    (modalWidth viewport)
+                    stackTrace1
+                    stackTrace2
+                )
+
+
+colorBlock : StackTrace -> Color -> El.Element Msg
+colorBlock st c =
+    El.el
+        [ Background.color <| translateColor c
+        , Events.onClick <| SetStackTraceMode <| ShowStackTrace st
+        , El.width <| El.px 100
+        , El.height <| El.px 20
         ]
+        El.none
+
+
+translateColor : Color -> El.Color
+translateColor ccolor =
+    let
+        c =
+            Color.toRgb ccolor
+    in
+    El.rgb255 c.red c.green c.blue
+
+
+black : El.Color
+black =
+    El.rgb 0 0 0
+
+
+gray : El.Color
+gray =
+    El.rgb 0.88 0.88 0.88
+
+
+white : El.Color
+white =
+    El.rgb 1 1 1
+
+
+stackTraceModal : ViewPort -> El.Element Msg -> El.Element Msg -> Html Msg
+stackTraceModal viewport title body =
+    El.layout
+        [ El.inFront <|
+            El.column
+                [ El.centerX
+                , El.centerY
+                , El.padding 10
+                , Background.color gray
+                , Border.solid
+                , Border.width 1
+                , Border.color black
+                , Font.family [ Font.typeface "calibri" ]
+                , Font.size 20
+                ]
+                [ El.row [ El.width El.fill ]
+                    [ title
+                    , El.el
+                        [ El.alignRight
+                        , Events.onClick (SetStackTraceMode NoStackTrace)
+                        , Font.size 30
+                        ]
+                        (El.text "×")
+                    ]
+                , El.el
+                    [ Font.size 13
+                    , Font.family [ Font.monospace ]
+                    , El.width <| El.px <| modalWidth viewport
+                    , El.height <| El.px <| modalHeight viewport
+                    , El.htmlAttribute <| style "overflow-wrap" "break-word"
+                    , El.htmlAttribute <| style "white-space" "pre-wrap"
+                    , El.htmlAttribute <| style "word-break" "keep-all"
+                    , Background.color white
+                    , El.scrollbarY
+                    ]
+                    body
+                ]
+        ]
+        El.none
+
+
+modalWidth : ViewPort -> Int
+modalWidth { width } =
+    round <| 0.8 * width
+
+
+modalHeight : ViewPort -> Int
+modalHeight { height } =
+    round <| 0.8 * height
 
 
 helpIcon : String -> Html a
@@ -689,9 +768,9 @@ getSortedFailuresOf classAndMethod =
     Maybe.withDefault [] << Dict.get classAndMethod
 
 
-failuresTable : List ( TestFailure, Color ) -> Html Msg
-failuresTable colorizedFailures =
-    table [] (failuresTableHeaderRow :: List.map failureRow colorizedFailures)
+failuresTable : StackTraceMode -> List ( TestFailure, Color ) -> Html Msg
+failuresTable stackTraceMode colorizedFailures =
+    table [] (failuresTableHeaderRow :: List.map (failureRow stackTraceMode) colorizedFailures)
 
 
 failuresTableHeaderRow : Html a
@@ -700,37 +779,72 @@ failuresTableHeaderRow =
         [ th [] [ text "Failed on" ]
         , th [] [ text "Build URL", helpIcon "Some build URLs are no longer available, because archived jobs are deleted after some time (usually a week)" ]
         , th [] [ text "Unique Stack Trace" ]
-        , th [] [ text "Action" ]
+        , th [] [ text "Stack Trace" ]
         ]
 
 
-failureRow : ( TestFailure, Color ) -> Html Msg
-failureRow ( { url, date, stackTrace }, color ) =
+failureRow : StackTraceMode -> ( TestFailure, Color ) -> Html Msg
+failureRow stackTraceMode ( { url, date, stackTrace }, color ) =
     let
         buildLinkOrNA =
             if String.isEmpty url then
                 text "N/A"
 
             else
-                a [ href url ] [ text <| extractJobNameAndBuildNumber url ]
+                a [ href url ] [ text <| TestFailure.extractJobNameAndBuildNumber url ]
+
+        ( newStackTraceMode, comparisonButtonLabel, isSelectedForComparison ) =
+            case stackTraceMode of
+                NoStackTrace ->
+                    ( OneStackTracePicked ( stackTrace, color )
+                    , "Compare"
+                    , False
+                    )
+
+                OneStackTracePicked ( stackTrace1, color1 ) ->
+                    if stackTrace1 == stackTrace then
+                        --This one already pick -> unpick it
+                        ( NoStackTrace
+                        , "Unselect"
+                        , True
+                        )
+
+                    else
+                        ( TwoStackTracesPicked ( stackTrace1, color1 ) ( stackTrace, color )
+                        , "Compare with selected"
+                        , False
+                        )
+
+                TwoStackTracesPicked _ _ ->
+                    ( OneStackTracePicked ( stackTrace, color )
+                    , "Compare"
+                    , False
+                    )
+
+                ShowStackTrace _ ->
+                    ( OneStackTracePicked ( stackTrace, color )
+                    , "Compare"
+                    , False
+                    )
     in
     tr []
         [ td [] [ text <| formatDateTime date ]
         , td [] [ buildLinkOrNA ]
-        , td [ style "background-color" (colorToHtml color) ] []
-        , td [] [ button [ onClick (ShowStackTrace stackTrace) ] [ text "Show Stack Trace" ] ]
+        , td [ style "background-color" (colorToHtml color) ] <|
+            if isSelectedForComparison then
+                [ text "Selected for comparison" ]
+
+            else
+                []
+        , td []
+            [ button
+                [ onClick <| SetStackTraceMode <| ShowStackTrace stackTrace ]
+                [ text "Show" ]
+            , button
+                [ onClick <| SetStackTraceMode newStackTraceMode ]
+                [ text comparisonButtonLabel ]
+            ]
         ]
-
-
-{-| From URL like "<https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest/job/drools-downstream-pullrequests/12/testReport">
-Extract "drools-downstream-pullrequests/12"
--}
-extractJobNameAndBuildNumber : String -> String
-extractJobNameAndBuildNumber fullUrl =
-    String.split "/" fullUrl
-        |> List.Extra.takeWhileRight (\piece -> piece /= "job")
-        |> List.take 2
-        |> String.join "/"
 
 
 {-| YYYY-MM-DD HH:mm
@@ -799,69 +913,9 @@ monthNumber month =
             "12"
 
 
-daysSinceLastFailure : List TestFailure -> Posix -> Int
-daysSinceLastFailure failures posixNow =
-    let
-        daysFromNow posixPast =
-            Time.posixToMillis posixNow - Time.posixToMillis posixPast |> toFloat |> millisToDays |> round
-    in
-    List.Extra.maximumBy (.date >> Time.posixToMillis) failures
-        |> Maybe.map (\lastFailure -> daysFromNow lastFailure.date)
-        |> Maybe.withDefault 0
-
-
 fqnToSimpleClassName : String -> String
 fqnToSimpleClassName fqn =
     String.split "." fqn |> List.reverse |> List.head |> Maybe.withDefault fqn
-
-
-failureListDecoder : Decode.Decoder (List TestFailure)
-failureListDecoder =
-    Decode.list testFailureDecoder
-
-
-standardDeviation : List Posix -> Float
-standardDeviation dts =
-    let
-        ts : List Int
-        ts =
-            List.map Time.posixToMillis dts
-
-        len : Float
-        len =
-            toFloat <| List.length ts
-
-        avg : Float
-        avg =
-            toFloat (List.sum ts) / len
-
-        summedSquares : Float
-        summedSquares =
-            List.sum <| List.map (\x -> (toFloat x - avg) ^ 2) ts
-    in
-    millisToDays <| sqrt <| summedSquares / len
-
-
-millisToDays : Float -> Float
-millisToDays millis =
-    millis / (24 * 60 * 60 * 1000)
-
-
-groupFailuresByClassAndMethod : List TestFailure -> GroupedFailures
-groupFailuresByClassAndMethod =
-    Dict.Extra.groupBy (\failure -> ( failure.testClass, failure.testMethod ))
-        -- sort by failure date from oldest to most recent
-        >> Dict.map (\_ failures -> List.sortBy (Time.posixToMillis << .date) failures)
-
-
-testFailureDecoder : Decode.Decoder TestFailure
-testFailureDecoder =
-    Decode.map5 TestFailure
-        (Decode.field "url" Decode.string)
-        (Decode.field "date" Iso8601.decoder)
-        (Decode.field "testClass" Decode.string)
-        (Decode.field "testMethod" Decode.string)
-        (Decode.field "stackTrace" Decode.string)
 
 
 epoch : Posix

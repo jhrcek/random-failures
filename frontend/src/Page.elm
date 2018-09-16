@@ -1,12 +1,13 @@
 module Page exposing
-    ( ClassAndMethod
-    , Page(..)
+    ( Page(..)
     , fromUrl
     , toClassFilter
     , toUrlHash
     )
 
 import Browser.Navigation
+import Color exposing (Color)
+import TestFailure exposing (ClassAndMethod, StackTrace, StackTraceMode(..), TestFailure)
 import Url exposing (Url)
 import Url.Parser exposing ((</>), Parser, custom, map, oneOf, s, string, top)
 
@@ -14,11 +15,7 @@ import Url.Parser exposing ((</>), Parser, custom, map, oneOf, s, string, top)
 type Page
     = Home
     | ClassDetails String
-    | MethodDetails ClassAndMethod (Maybe String)
-
-
-type alias ClassAndMethod =
-    ( String, String )
+    | MethodDetails ClassAndMethod StackTraceMode
 
 
 toUrlHash : Page -> String
@@ -35,7 +32,7 @@ toUrlHash page =
                 MethodDetails ( fqcn, method ) _ ->
                     [ "class", fqcn, "method", method ]
     in
-    "#/" ++ String.join "/" pieces
+    String.join "/" ("#" :: pieces)
 
 
 pageParser : Parser (Page -> a) a
@@ -44,7 +41,7 @@ pageParser =
         [ map Home top
         , map ClassDetails (s "class" </> string)
         , map
-            (\clz method -> MethodDetails ( percDecode clz, percDecode method ) Nothing)
+            (\clz method -> MethodDetails ( percDecode clz, percDecode method ) NoStackTrace)
             (s "class" </> string </> s "method" </> string)
         ]
 

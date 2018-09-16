@@ -42,26 +42,3 @@ a:hover, a:active {
   margin-top: 80px;
   width: 95%;
 }
-
-.stacktrace {
-  position: fixed;
-  top: 10%;
-  left: 5%;
-  width: 90%;
-  max-height: 80%;
-  padding: 10px;
-  border: 1px solid black;
-  background-color: #EEE;
-  overflow: auto;
-}
-
-.stacktrace-closer {
-  float: right;
-  font-size: 1.5em;
-}
-
-.stacktrace pre {
-  font-family: monospace;
-  white-space: pre-wrap;
-  word-break: keep-all;
-}
