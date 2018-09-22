@@ -1,18 +1,18 @@
 module BuildDurations where
 
-import           Conduit             (filterC, iterMC, mapM_C, runConduit,
-                                      yieldMany, (.|))
-import           Data.List           (genericLength)
-import           Data.Monoid         ((<>))
-import           Data.Text           (Text)
-import qualified Data.Text           as Text
-import qualified Data.Text.IO        as Text
-import           Data.Time.Clock     (secondsToDiffTime)
-import           Data.Time.LocalTime (timeToTimeOfDay)
-import qualified Data.Vector         as Vect
-import qualified Jenkins             as J
-import qualified Statistics.Sample   as Stat
+import qualified Data.Text as Text
+import qualified Data.Text.IO as Text
+import qualified Data.Vector as Vect
+import qualified Jenkins as J
+import qualified Statistics.Sample as Stat
 import qualified Util
+
+import Conduit (filterC, iterMC, mapM_C, runConduit, yieldMany, (.|))
+import Data.List (genericLength)
+import Data.Monoid ((<>))
+import Data.Text (Text)
+import Data.Time.Clock (secondsToDiffTime)
+import Data.Time.LocalTime (timeToTimeOfDay)
 
 {-| Scrape durations of downstream PR job builds with result SUCCESS/UNSTABLE builds -}
 printBuildTimesOfFinishedDownstreamPrJobs :: IO ()
@@ -20,7 +20,7 @@ printBuildTimesOfFinishedDownstreamPrJobs = do
     jobUrls <- J.getMasterPrJobUrls
     runConduit
         $ yieldMany jobUrls
-        .| filterC (\jobUrl -> Text.isSuffixOf "downstream-pullrequests" $ J.getJobName jobUrl)
+        .| filterC (Text.isSuffixOf "downstream-pullrequests" . J.getJobName)
         .| iterMC (\jobUrl -> Text.putStr $  J.getJobName jobUrl <> " | ")
         .| mapM_C (\jobUrl -> do
               builds <- J.getAllBuilds jobUrl

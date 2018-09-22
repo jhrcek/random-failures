@@ -13,17 +13,18 @@ import Element.Events as Events
 import Element.Font as Font
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, a, button, div, h2, h3, img, input, li, pre, span, strong, table, td, text, th, tr, ul)
-import Html.Attributes as Attr exposing (checked, class, cols, href, maxlength, name, rows, src, style, title, type_, value)
+import Html exposing (Html, a, button, div, h2, h3, img, input, li, strong, table, td, text, th, tr, ul)
+import Html.Attributes as Attr exposing (class, href, maxlength, src, style, target, title, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Http exposing (Error(..))
 import List.Extra
 import Page exposing (Page)
+import Regex
 import RemoteData exposing (RemoteData(..), WebData)
 import StacktraceDiff
 import Table exposing (defaultCustomizations)
 import Task
-import TestFailure exposing (ClassAndMethod, GroupedFailures, StackTrace(..), StackTraceMode(..), TestFailure, getStackTrace, stackTraceToString)
+import TestFailure exposing (ClassAndMethod, GitInfo, GroupedFailures, StackTrace(..), StackTraceMode(..), TestFailure, getStackTrace, stackTraceToString)
 import Time exposing (Month(..), Posix)
 import Url exposing (Url)
 
@@ -93,7 +94,6 @@ initialModel initialPage key =
     , tableState = Table.initialSort daysSinceLastFailureColumnName
     , page = initialPage
     , now = epoch
-    , fqnEnabled = False
     , navKey = key
     , viewport = initialViewPort
     }
@@ -128,11 +128,6 @@ update msg model =
 
         SetNow posix ->
             ( { model | now = posix }
-            , Cmd.none
-            )
-
-        ToggleFQN flag ->
-            ( { model | fqnEnabled = flag }
             , Cmd.none
             )
 
@@ -234,7 +229,6 @@ type Msg
     = ChangeFailureCountFilter String
     | SetTableState Table.State
     | SetNow Posix
-    | ToggleFQN Bool
     | SetStackTraceMode StackTraceMode
     | UrlChange Url
     | LinkClicked UrlRequest
@@ -249,7 +243,6 @@ type alias Model =
     , tableState : Table.State
     , page : Page
     , now : Posix
-    , fqnEnabled : Bool
     , navKey : Key
     , viewport : ViewPort
     }
@@ -360,8 +353,8 @@ description ( fromDate, toDate ) =
         ]
 
 
-filterControls : Model -> Html Msg
-filterControls { filters, fqnEnabled } =
+filterControls : { a | filters : Filters } -> Html Msg
+filterControls { filters } =
     div []
         [ text "Show tests that failed "
         , input
@@ -375,13 +368,6 @@ filterControls { filters, fqnEnabled } =
             ]
             []
         , text " or more times"
-        , div []
-            [ text "Class Names"
-            , input [ type_ "radio", name "fqn", checked (not fqnEnabled), onClick (ToggleFQN False) ] []
-            , text "Simple"
-            , input [ type_ "radio", name "fqn", checked fqnEnabled, onClick (ToggleFQN True) ] []
-            , text "Fully Qualified"
-            ]
         ]
 
 
@@ -394,7 +380,7 @@ failureSummaryTable model =
                     applyFilters model.filters failureData
             in
             div []
-                [ Table.view (tableConfig model.now model.fqnEnabled) model.tableState acceptedFailures
+                [ Table.view (tableConfig model.now) model.tableState acceptedFailures
                 , div [] [ text "* Standard deviation of failure dates (in days)" ]
                 ]
 
@@ -429,13 +415,14 @@ faq =
         ]
 
 
-tableConfig : Posix -> Bool -> Table.Config TableRecord Msg
-tableConfig now fqnEnabled =
+tableConfig : Posix -> Table.Config TableRecord Msg
+tableConfig now =
     Table.customConfig
         { toId = \( ( fqcn, method ), _ ) -> fqcn ++ method
         , toMsg = SetTableState
         , columns =
-            [ classColumn fqnEnabled
+            [ gitHubLinkColumn
+            , classColumn
             , methodColumn
             , Table.intColumn "Failures" (\( ( _, _ ), fs ) -> List.length fs)
             , stdDevColumn
@@ -474,22 +461,35 @@ isProbablyRandom fs now =
     failureCount >= 5 && lastFailureDaysAgo < 14 && failureDatesStdDev > 5
 
 
-classColumn : Bool -> Table.Column TableRecord Msg
-classColumn fqnEnabled =
+gitHubLinkColumn : Table.Column TableRecord Msg
+gitHubLinkColumn =
+    let
+        viewData ( _, failures ) =
+            { attributes = []
+            , children = [ gitHubLinkFromFailures failures ]
+            }
+
+        sortByRepoName ( _, failures ) =
+            withGitInfo .repo "N/A" failures
+    in
+    Table.veryCustomColumn
+        { name = "GitHub Link"
+        , viewData = viewData
+        , sorter = Table.increasingOrDecreasingBy sortByRepoName
+        }
+
+
+classColumn : Table.Column TableRecord Msg
+classColumn =
     let
         getVisibleClassName ( ( fqcn, _ ), _ ) =
-            if fqnEnabled then
-                fqcn
-
-            else
-                fqnToSimpleClassName fqcn
+            fqnToSimpleClassName fqcn
 
         classDetailsLink (( ( fqcn, _ ), _ ) as record) =
             { attributes = []
             , children =
                 [ a [ href <| Page.toUrlHash <| Page.ClassDetails fqcn ]
-                    [ text <| getVisibleClassName record
-                    ]
+                    [ text <| getVisibleClassName record ]
                 ]
             }
     in
@@ -498,6 +498,37 @@ classColumn fqnEnabled =
         , sorter = Table.increasingOrDecreasingBy getVisibleClassName
         , viewData = classDetailsLink
         }
+
+
+{-| If the first failure in the list has GitInfo apply the callback to it.
+Otherwise return the 2nd argument.
+-}
+withGitInfo : (GitInfo -> r) -> r -> List TestFailure -> r
+withGitInfo gitInfoCallback resultWhenGitInfoNotAvailable failures =
+    List.head failures
+        |> Maybe.andThen (\firstFailure -> Maybe.map gitInfoCallback firstFailure.gitInfo)
+        |> Maybe.withDefault resultWhenGitInfoNotAvailable
+
+
+gitHubLinkFromFailures : List TestFailure -> Html a
+gitHubLinkFromFailures =
+    withGitInfo gitHubSourceLink (text "N/A")
+
+
+gitHubSourceLink : GitInfo -> Html a
+gitHubSourceLink gitInfo =
+    a [ href (gitHubClassUrl gitInfo), target "_blank", title "Class source on GitHub" ]
+        [ text gitInfo.repo ]
+
+
+gitHubClassUrl : GitInfo -> String
+gitHubClassUrl { repo, pathInRepo } =
+    "https://github.com/kiegroup/" ++ repo ++ "/blob/master/" ++ pathInRepo
+
+
+gitHubClassUrlWithLine : GitInfo -> Int -> String
+gitHubClassUrlWithLine gitInfo lineNumber =
+    gitHubClassUrl gitInfo ++ "#L" ++ String.fromInt lineNumber
 
 
 methodColumn : Table.Column TableRecord Msg
@@ -545,15 +576,25 @@ failureDetailView classAndMethod sortedFailures dateRange stackTraceMode viewpor
 
         colorizedFailures =
             TestFailure.assignColorsToStacktraces sortedFailures
+
+        gitHubLink =
+            gitHubLinkFromFailures sortedFailures
+
+        maybeGitInfo =
+            withGitInfo Just Nothing sortedFailures
     in
     [ homeLink
     , h2 [] [ text "Failure details" ]
-    , failureDetailsSummary classAndMethod (List.length sortedFailures) (List.length uniqueStacktracesAndMessages) (List.length uniqueStacktraces)
+    , failureDetailsSummary classAndMethod
+        gitHubLink
+        (List.length sortedFailures)
+        (List.length uniqueStacktracesAndMessages)
+        (List.length uniqueStacktraces)
     , h3 [] [ text "Spread of failure dates" ]
     , viewFailureDatesChart dateRange colorizedFailures
     , h3 [] [ text "Failures" ]
     , failuresTable stackTraceMode colorizedFailures
-    , stackTraceView stackTraceMode viewport
+    , stackTraceView maybeGitInfo classAndMethod stackTraceMode viewport
     ]
 
 
@@ -562,8 +603,8 @@ homeLink =
     a [ href (Page.toUrlHash Page.Home) ] [ text "<< home" ]
 
 
-failureDetailsSummary : ClassAndMethod -> Int -> Int -> Int -> Html Msg
-failureDetailsSummary (( fqcn, _ ) as classAndMethod) totalFailures uniqueStacktracesAndMessagesCount uniqueStacktracesCount =
+failureDetailsSummary : ClassAndMethod -> Html Msg -> Int -> Int -> Int -> Html Msg
+failureDetailsSummary (( fqcn, _ ) as classAndMethod) gitHubLink totalFailures uniqueStacktracesAndMessagesCount uniqueStacktracesCount =
     table []
         [ tr []
             [ td [] [ strong [] [ text "Class" ] ]
@@ -575,6 +616,10 @@ failureDetailsSummary (( fqcn, _ ) as classAndMethod) totalFailures uniqueStackt
         , tr []
             [ td [] [ strong [] [ text "Method" ] ]
             , td [] [ text (getMethodName classAndMethod) ]
+            ]
+        , tr []
+            [ td [] [ strong [] [ text "Source code on GitHub" ] ]
+            , td [] [ gitHubLink ]
             ]
         , tr []
             [ td [] [ strong [] [ text "Total failures" ] ]
@@ -601,8 +646,8 @@ failureDetailsSummary (( fqcn, _ ) as classAndMethod) totalFailures uniqueStackt
         ]
 
 
-stackTraceView : StackTraceMode -> ViewPort -> Html Msg
-stackTraceView stackTraceMode viewport =
+stackTraceView : Maybe GitInfo -> ClassAndMethod -> StackTraceMode -> ViewPort -> Html Msg
+stackTraceView maybeGitInfo ( fqcn, method ) stackTraceMode viewport =
     let
         closeModal =
             onClick (SetStackTraceMode NoStackTrace)
@@ -614,7 +659,12 @@ stackTraceView stackTraceMode viewport =
         ShowStackTrace stackTrace ->
             stackTraceModal viewport
                 (El.text "Stack Trace")
-                (El.text <| stackTraceToString stackTrace)
+                (El.html
+                    (maybeGitInfo
+                        |> Maybe.map (\gitInfo -> addLineLinksToGitHub gitInfo fqcn stackTrace)
+                        |> Maybe.withDefault (text <| stackTraceToString stackTrace)
+                    )
+                )
 
         OneStackTracePicked _ ->
             text ""
@@ -633,6 +683,50 @@ stackTraceView stackTraceMode viewport =
                     stackTrace1
                     stackTrace2
                 )
+
+
+{-| If the stack trace contains direct references to the class name
+e.g. "at org.drools.scorecards.ScoringStrategiesTest.executeAndFetchScore(ScoringStrategiesTest.java:221)"
+We surround the "ScoringStrategiesTest.java:221" with direct link to that line of source code on GitHub
+-}
+addLineLinksToGitHub : GitInfo -> String -> StackTrace -> Html a
+addLineLinksToGitHub gitInfo fqcn stackTrace =
+    let
+        st =
+            stackTraceToString stackTrace
+
+        classNameWithLineNumberRegex =
+            Maybe.withDefault Regex.never <| Regex.fromString (fqnToSimpleClassName fqcn ++ "\\.java:\\d+")
+
+        matches =
+            Regex.find classNameWithLineNumberRegex st
+
+        processMatch aMatch ( curIndex, htmlList ) =
+            let
+                textBeforeMatch =
+                    String.slice curIndex aMatch.index st
+
+                newIndex =
+                    aMatch.index + String.length aMatch.match
+
+                lineNumber =
+                    String.split ":" aMatch.match
+                        |> List.drop 1
+                        |> List.head
+                        |> Maybe.andThen String.toInt
+                        |> Maybe.withDefault 0
+            in
+            ( newIndex
+            , Html.a [ href <| gitHubClassUrlWithLine gitInfo lineNumber, target "_blank" ] [ Html.text aMatch.match ]
+                :: Html.text textBeforeMatch
+                :: htmlList
+            )
+    in
+    List.foldl processMatch ( 0, [] ) matches
+        |> (\( idx, htmlList ) ->
+                List.reverse <| Html.text (String.slice idx (String.length st) st) {- remaining piece of text after the last match -} :: htmlList
+           )
+        |> Html.div []
 
 
 colorBlock : StackTrace -> Color -> El.Element Msg

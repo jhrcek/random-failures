@@ -1,5 +1,6 @@
 module TestFailure exposing
     ( ClassAndMethod
+    , GitInfo
     , GroupedFailures
     , StackTrace
     , StackTraceMode(..)
@@ -29,6 +30,7 @@ type alias TestFailure =
     , testClass : String
     , testMethod : String
     , stackTrace : StackTrace
+    , gitInfo : Maybe GitInfo
     }
 
 
@@ -42,6 +44,12 @@ type StackTrace
 
 type alias ClassAndMethod =
     ( String, String )
+
+
+type alias GitInfo =
+    { repo : String
+    , pathInRepo : String
+    }
 
 
 stackTraceToString : StackTrace -> String
@@ -68,12 +76,20 @@ listDecoder =
 
 decoder : Decoder TestFailure
 decoder =
-    Decode.map5 TestFailure
+    Decode.map6 TestFailure
         (Decode.field "url" Decode.string)
         (Decode.field "date" Iso8601.decoder)
         (Decode.field "testClass" Decode.string)
         (Decode.field "testMethod" Decode.string)
         (Decode.map StackTrace <| Decode.field "stackTrace" Decode.string)
+        (Decode.field "gitInfo" <| Decode.nullable gitInfoDecoder)
+
+
+gitInfoDecoder : Decoder GitInfo
+gitInfoDecoder =
+    Decode.map2 GitInfo
+        (Decode.field "repo" Decode.string)
+        (Decode.field "pathInRepo" Decode.string)
 
 
 {-| From URL like "<https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest/job/drools-downstream-pullrequests/12/testReport">

@@ -12,24 +12,24 @@ module Jenkins
   , BuildResult(..)
   ) where
 
-import           Control.Lens         (Fold, filtered, to, (^.), (^..))
-import           Data.Aeson           (FromJSON, parseJSON, withObject, (.!=),
-                                       (.:), (.:?))
-import           Data.Aeson.Lens      (key, _Array, _JSON, _Number, _String)
-import           Data.ByteString.Lazy (ByteString)
-import qualified Data.List            as List
-import           Data.Maybe           (fromMaybe)
-import           Data.Monoid          ((<>))
-import           Data.Text            (Text)
-import qualified Data.Text            as Text
-import           Data.Time.Clock      (UTCTime)
-import           Data.Time.Format     (defaultTimeLocale, parseTimeM)
-import           Failure              (TestFailure, isFailure, toFailure)
-import qualified Network.Wreq         as Wreq
-import qualified Text.Atom.Feed       as Atom
-import           Text.Feed.Import     (parseFeedSource)
-import           Text.Feed.Types      (Feed (AtomFeed))
-import           Text.Read            (readMaybe)
+import qualified Data.List as List
+import qualified Data.Text as Text
+import qualified Network.Wreq as Wreq
+import qualified Text.Atom.Feed as Atom
+
+import Control.Lens (Fold, filtered, to, (^.), (^..))
+import Data.Aeson (FromJSON, parseJSON, withObject, (.!=), (.:), (.:?))
+import Data.Aeson.Lens (key, _Array, _JSON, _Number, _String)
+import Data.ByteString.Lazy (ByteString)
+import Data.Maybe (fromMaybe)
+import Data.Monoid ((<>))
+import Data.Text (Text)
+import Data.Time.Clock (UTCTime)
+import Data.Time.Format (defaultTimeLocale, parseTimeM)
+import Failure (TestFailure, isFailure, toFailure)
+import Text.Feed.Import (parseFeedSource)
+import Text.Feed.Types (Feed (AtomFeed))
+import Text.Read (readMaybe)
 
 newtype JobUrl = JobUrl Text deriving Show
 

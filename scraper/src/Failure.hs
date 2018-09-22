@@ -1,12 +1,13 @@
-{-# LANGUAGE DeriveAnyClass    #-}
-{-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE DeriveAnyClass  #-}
+{-# LANGUAGE DeriveGeneric   #-}
+{-# LANGUAGE RecordWildCards #-}
 module Failure where
-import           Data.Aeson      (FromJSON, ToJSON, parseJSON, withObject,
-                                  (.!=), (.:), (.:?))
-import           Data.Text       (Text)
-import           Data.Time.Clock (UTCTime)
-import           GHC.Generics    (Generic)
+
+import Data.Aeson (FromJSON, ToJSON, parseJSON, withObject, (.!=), (.:), (.:?))
+import Data.Text (Text)
+import Data.Time.Clock (UTCTime)
+import GHC.Generics (Generic)
+import GitHub (GitInfo)
 
 {-| JenkinsTestResult serves as input for our analyis.
     It comes from $BUILD_URL/testReport/api/json?tree=suites[cases[className,errorDetails,errorStackTrace,name,status]]
@@ -47,6 +48,7 @@ toFailure buildUrl builtOn result = TestFailure
     , testClass  = resultClass result
     , testMethod = resultMethod result
     , stackTrace = resultStackTrace result
+    , gitInfo    = Nothing -- Filled in later
     }
 
 {-| TestFailure represents similar data which,
@@ -58,4 +60,5 @@ data TestFailure = TestFailure
     , testClass  :: !Text
     , testMethod :: !Text
     , stackTrace :: !Text
+    , gitInfo    :: Maybe GitInfo
     } deriving (Eq, Show, Generic, ToJSON, FromJSON)

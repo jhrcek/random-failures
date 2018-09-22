@@ -20,12 +20,14 @@ dependencies:
 - feed
 - lens
 - lens-aeson
+- foldl
 - text
 - time
 - wreq
 - directory
 - filepath
 - statistics
+- turtle
 - vector
 executables:
   scraper:
