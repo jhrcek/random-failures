@@ -27,10 +27,10 @@ toUrlHash page =
                     []
 
                 ClassDetails fqcn ->
-                    [ "class", fqcn ]
+                    [ "class", Url.percentEncode fqcn ]
 
                 MethodDetails ( fqcn, method ) _ ->
-                    [ "class", fqcn, "method", method ]
+                    [ "class", Url.percentEncode fqcn, "method", Url.percentEncode method ]
     in
     String.join "/" ("#" :: pieces)
 
@@ -39,9 +39,9 @@ pageParser : Parser (Page -> a) a
 pageParser =
     oneOf
         [ map Home top
-        , map ClassDetails (s "class" </> string)
-        , map
-            (\clz method -> MethodDetails ( percDecode clz, percDecode method ) NoStackTrace)
+        , map (\fqcn -> ClassDetails (percDecode fqcn))
+            (s "class" </> string)
+        , map (\fqcn method -> MethodDetails ( percDecode fqcn, percDecode method ) NoStackTrace)
             (s "class" </> string </> s "method" </> string)
         ]
 
