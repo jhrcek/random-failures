@@ -1,4 +1,4 @@
-body {
+/* body {
   font-family: calibri, helvetica, arial, sans-serif;
 }
 
@@ -8,7 +8,7 @@ table {
 
 td, th {
   border: 1px solid black;
-}
+} */
 
 a:link, a:visited {
   text-decoration: none;
@@ -16,14 +16,6 @@ a:link, a:visited {
 
 a:hover, a:active {
   text-decoration: underline;
-}
-
-.hint-image {
-  width: 15px;
-  height: 15px;
-  margin-left: 4px;
-  margin-right: 4px;
-  margin-bottom: -2px;
 }
 
 .timeline-dot {

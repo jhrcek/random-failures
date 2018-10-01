@@ -6,16 +6,18 @@ import Browser.Events
 import Browser.Navigation as Nav exposing (Key)
 import Color exposing (Color)
 import Dict
-import Element as El
+import Element as El exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
+import Element.Input as Input
+import Element.Region as Region
 import FormatNumber
 import FormatNumber.Locales exposing (usLocale)
-import Html exposing (Html, a, button, div, h2, h3, img, input, li, strong, table, td, text, th, tr, ul)
-import Html.Attributes as Attr exposing (class, href, maxlength, src, style, target, title, type_, value)
-import Html.Events exposing (onClick, onInput)
+import Html exposing (Html, a, div, text)
+import Html.Attributes as Attr exposing (class, href, maxlength, style, target, title, type_)
+import Html.Events exposing (onClick)
 import Http exposing (Error(..))
 import List.Extra
 import Page exposing (Page)
@@ -276,13 +278,13 @@ view model =
             case model.groupedFailures of
                 NotAsked ->
                     -- can't happen as we're beginning in the Loading state
-                    [ text "Request to load failures.json wasn't sent" ]
+                    El.text "Request to load failures.json wasn't sent"
 
                 Loading ->
-                    [ text "Loading data ..." ]
+                    El.text "Loading data ..."
 
                 Failure httpError ->
-                    [ text <| showHttpError httpError ]
+                    El.text <| showHttpError httpError
 
                 Success loadedFailures ->
                     case model.page of
@@ -303,77 +305,75 @@ view model =
                             else
                                 failureDetailView classAndMethod failures model.filters.dateRange stackTraceMode model.viewport
     in
-    { title = "kiegroup CI Test Failures", body = body }
+    { title = "kiegroup CI Test Failures", body = [ El.layout [ Font.family [ Font.typeface "calibri", Font.typeface "helvetica" ] ] body ] }
 
 
-homeView : Model -> List (Html Msg)
+homeView : Model -> Element Msg
 homeView model =
-    [ description model.filters.dateRange
-    , filterControls model
-    , h3 [] [ text "Failures (grouped by Class and Test method)" ]
-    , failureSummaryTable model
-    , faq
-    ]
+    El.column []
+        [ description model.filters.dateRange
+        , filterControls model
+        , El.el [ Region.heading 3 ] (El.text "Failures (grouped by Class and Test method)")
+        , failureSummaryTable model
+        , faq
+        ]
 
 
-classDetailsView : String -> Model -> List (Html Msg)
+classDetailsView : String -> Model -> Element Msg
 classDetailsView fqcn model =
-    [ homeLink
-    , h3 [] [ text <| "Failures in class " ++ fqcn ]
-    , failureSummaryTable model
-    ]
+    El.column []
+        [ homeLink
+        , El.el [ Region.heading 3 ] (El.text <| "Failures in class " ++ fqcn)
+        , failureSummaryTable model
+        ]
 
 
-classAndMethodNotFoundView : ClassAndMethod -> List (Html Msg)
+classAndMethodNotFoundView : ClassAndMethod -> Element Msg
 classAndMethodNotFoundView ( clz, method ) =
-    [ homeLink
-    , h2 [] [ text <| "No failures found" ]
-    , table
-        []
-        [ tr []
-            [ td [] [ strong [] [ text "Class" ] ]
-            , td [] [ text clz ]
-            ]
-        , tr []
-            [ td [] [ strong [] [ text "Method" ] ]
-            , td [] [ text method ]
-            ]
+    let
+        boldText =
+            El.el [ Font.bold, El.width (El.px 100) ] << El.text
+    in
+    El.column []
+        [ homeLink
+        , El.el [ Region.heading 3 ] (El.text <| "No failures found")
+        , El.row [] [ boldText "Class", El.text clz ]
+        , El.row [] [ boldText "Method", El.text method ]
+        , El.text "Are you sure you've got the class and method name right?"
         ]
-    , div [] [ text "Are you sure you've got the class and method name right?" ]
-    ]
 
 
-description : ( Posix, Posix ) -> Html Msg
+description : ( Posix, Posix ) -> Element Msg
 description ( fromDate, toDate ) =
-    div []
-        [ h2 [] [ text "Random test failure analysis" ]
-        , text "This report was generated on GENERATED_ON_PLACEHOLDER and lists most"
-        , helpIcon "Builds with more than 50 test failures are excluded, because they add a lot of data without providing much value for flaky test identification."
-        , text "test failures in "
-        , a [ href "https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest/" ] [ text "rhba-jenkins PR jobs" ]
-        , text <| " (master only) from " ++ formatDate fromDate ++ " to " ++ formatDate toDate ++ "."
-        ]
-
-
-filterControls : { a | filters : Filters } -> Html Msg
-filterControls { filters } =
-    div []
-        [ text "Show tests that failed "
-        , input
-            [ type_ "number"
-            , maxlength 2
-            , Attr.min "0"
-            , Attr.max "100"
-            , onInput ChangeFailureCountFilter
-            , value (String.fromInt filters.failureCount)
-            , style "width" "50px"
+    El.column []
+        [ El.el [ Region.heading 2 ] (El.text "Random test failure analysis")
+        , El.paragraph []
+            [ El.text "This report was generated on GENERATED_ON_PLACEHOLDER and lists most"
+            , helpIcon "Builds with more than 50 test failures are excluded, because they add a lot of data without providing much value for flaky test identification."
+            , El.text "test failures in "
+            , El.link []
+                { url = "https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest/"
+                , label = El.text "rhba-jenkins PR jobs"
+                }
+            , El.text <| " (master only) from " ++ formatDate fromDate ++ " to " ++ formatDate toDate ++ "."
             ]
-            []
-        , text " or more times"
         ]
 
 
-failureSummaryTable : Model -> Html Msg
+filterControls : { a | filters : Filters } -> Element Msg
+filterControls { filters } =
+    El.paragraph []
+        [ El.text "Show tests that failed "
+        , Input.text [ El.htmlAttribute (type_ "number"), El.htmlAttribute (maxlength 2), El.htmlAttribute (Attr.min "0"), El.htmlAttribute (Attr.max "100"), El.htmlAttribute (style "width" "50px") ]
+            { onChange = ChangeFailureCountFilter
+            , text = String.fromInt filters.failureCount
+            , placeholder = Nothing
+            , label = Input.labelLeft [] (El.text " or more times")
+            }
+        ]
+
+
+failureSummaryTable : Model -> Element Msg
 failureSummaryTable model =
     case model.groupedFailures of
         Success failureData ->
@@ -381,13 +381,13 @@ failureSummaryTable model =
                 acceptedFailures =
                     applyFilters model.filters failureData
             in
-            div []
-                [ Table.view (tableConfig model.now) model.tableState acceptedFailures
-                , div [] [ text "* Standard deviation of failure dates (in days)" ]
+            El.column []
+                [ El.html <| Table.view (tableConfig model.now) model.tableState acceptedFailures
+                , El.text "* Standard deviation of failure dates (in days)"
                 ]
 
         _ ->
-            div [] [ text "No data available" ]
+            El.text "No data available"
 
 
 applyFilters : Filters -> GroupedFailures -> List ( ClassAndMethod, List TestFailure )
@@ -397,23 +397,21 @@ applyFilters filters groupedFailures =
         |> List.filter (\( ( fqcn, _ ), _ ) -> filters.className |> Maybe.map (\chosenFqcn -> chosenFqcn == fqcn) |> Maybe.withDefault True)
 
 
-faq : Html Msg
+faq : Element Msg
 faq =
-    div []
-        [ h2 [] [ text "When is test method considered to be failing randomly?" ]
-        , div []
-            [ text <|
+    El.column []
+        [ El.el [ Region.heading 2 ] (El.text "When is test method considered to be failing randomly?")
+        , El.paragraph []
+            [ El.text <|
                 "The following heuristic is used to highlight random failures. "
                     ++ "A test is considered randomly failing if all of the following conditions hold (open to discussion!):"
-            , ul []
-                [ li [] [ text "Failed 5 or more times" ]
-                , li [] [ text "Last failure ocurred no longer than 14 days ago" ]
-                , li [] [ text "Standard deviation of failure dates is greater than 5 days" ]
-                ]
             ]
-        , h2 [] [ text "Got ideas about how to make this report more useful?" ]
-        , text "File an issue on "
-        , a [ href "https://github.com/jhrcek/random-failures/issues" ] [ text "project's page" ]
+        , El.text "Failed 5 or more times"
+        , El.text "Last failure ocurred no longer than 14 days ago"
+        , El.text "Standard deviation of failure dates is greater than 5 days"
+        , El.el [ Region.heading 2 ] (El.text "Got ideas about how to make this report more useful?")
+        , El.text "File an issue on "
+        , El.link [] { url = "https://github.com/jhrcek/random-failures/issues", label = El.text "project's page" }
         ]
 
 
@@ -468,7 +466,7 @@ gitHubLinkColumn =
     let
         viewData ( _, failures ) =
             { attributes = []
-            , children = [ gitHubLinkFromFailures failures ]
+            , children = [ El.layout [] (gitHubLinkFromFailures failures) ]
             }
 
         sortByRepoName ( _, failures ) =
@@ -512,15 +510,17 @@ withGitInfo gitInfoCallback resultWhenGitInfoNotAvailable failures =
         |> Maybe.withDefault resultWhenGitInfoNotAvailable
 
 
-gitHubLinkFromFailures : List TestFailure -> Html a
+gitHubLinkFromFailures : List TestFailure -> Element a
 gitHubLinkFromFailures =
-    withGitInfo gitHubSourceLink (text "N/A")
+    withGitInfo gitHubSourceLink (El.text "N/A")
 
 
-gitHubSourceLink : GitInfo -> Html a
+gitHubSourceLink : GitInfo -> Element a
 gitHubSourceLink gitInfo =
-    a [ href (gitHubClassUrl gitInfo), target "_blank", title "Class source on GitHub" ]
-        [ text gitInfo.repo ]
+    El.link [ El.htmlAttribute (target "_blank"), El.htmlAttribute (title "Class source on GitHub") ]
+        { url = gitHubClassUrl gitInfo
+        , label = El.text gitInfo.repo
+        }
 
 
 gitHubClassUrl : GitInfo -> String
@@ -564,7 +564,7 @@ stdDevColumn =
         }
 
 
-failureDetailView : ClassAndMethod -> List TestFailure -> ( Posix, Posix ) -> StackTraceMode -> ViewPort -> List (Html Msg)
+failureDetailView : ClassAndMethod -> List TestFailure -> ( Posix, Posix ) -> StackTraceMode -> ViewPort -> Element Msg
 failureDetailView classAndMethod sortedFailures dateRange stackTraceMode viewport =
     let
         stacktraces =
@@ -585,74 +585,85 @@ failureDetailView classAndMethod sortedFailures dateRange stackTraceMode viewpor
         maybeGitInfo =
             withGitInfo Just Nothing sortedFailures
     in
-    [ homeLink
-    , h2 [] [ text "Failure details" ]
-    , failureDetailsSummary classAndMethod
-        gitHubLink
-        (List.length sortedFailures)
-        (List.length uniqueStacktracesAndMessages)
-        (List.length uniqueStacktraces)
-    , h3 [] [ text "Spread of failure dates" ]
-    , viewFailureDatesChart dateRange colorizedFailures
-    , h3 [] [ text "Failures" ]
-    , failuresTable stackTraceMode colorizedFailures
-    , stackTraceView maybeGitInfo classAndMethod stackTraceMode viewport
-    ]
+    El.column []
+        [ homeLink
+        , El.el [ Region.heading 2 ] (El.text "Failure details")
+        , failureDetailsSummary classAndMethod
+            gitHubLink
+            (List.length sortedFailures)
+            (List.length uniqueStacktracesAndMessages)
+            (List.length uniqueStacktraces)
+        , El.el [ Region.heading 3 ] (El.text "Spread of failure dates")
+        , viewFailureDatesChart dateRange colorizedFailures
+        , El.el [ Region.heading 3 ] (El.text "Failures")
+        , failuresTable stackTraceMode colorizedFailures
+        , stackTraceView maybeGitInfo classAndMethod stackTraceMode viewport
+        ]
 
 
-homeLink : Html Msg
+homeLink : Element Msg
 homeLink =
-    a [ href (Page.toUrlHash Page.Home) ] [ text "<< home" ]
+    El.link []
+        { url = Page.toUrlHash Page.Home
+        , label = El.text "<< home"
+        }
 
 
-failureDetailsSummary : ClassAndMethod -> Html Msg -> Int -> Int -> Int -> Html Msg
+failureDetailsSummary : ClassAndMethod -> Element Msg -> Int -> Int -> Int -> Element Msg
 failureDetailsSummary (( fqcn, _ ) as classAndMethod) gitHubLink totalFailures uniqueStacktracesAndMessagesCount uniqueStacktracesCount =
-    table []
-        [ tr []
-            [ td [] [ strong [] [ text "Class" ] ]
-            , td []
-                [ a [ href <| Page.toUrlHash <| Page.ClassDetails fqcn ]
-                    [ text fqcn ]
-                ]
+    let
+        fistColumnWidth =
+            El.width (El.px 500)
+
+        boldText =
+            El.el [ Font.bold, fistColumnWidth ] << El.text
+    in
+    El.column []
+        [ El.row []
+            [ boldText "Class"
+            , El.link []
+                { url = Page.toUrlHash <| Page.ClassDetails fqcn
+                , label = El.text fqcn
+                }
             ]
-        , tr []
-            [ td [] [ strong [] [ text "Method" ] ]
-            , td [] [ text (getMethodName classAndMethod) ]
+        , El.row []
+            [ boldText "Method"
+            , El.text <| getMethodName classAndMethod
             ]
-        , tr []
-            [ td [] [ strong [] [ text "Source code on GitHub" ] ]
-            , td [] [ gitHubLink ]
+        , El.row []
+            [ boldText "Source code on GitHub"
+            , gitHubLink
             ]
-        , tr []
-            [ td [] [ strong [] [ text "Total failures" ] ]
-            , td [] [ text <| String.fromInt totalFailures ]
+        , El.row []
+            [ boldText "Total failures"
+            , El.text <| String.fromInt totalFailures
             ]
-        , tr []
-            [ td []
-                [ strong [] [ text "Unique stack traces (including ex. message)" ]
+        , El.row []
+            [ El.paragraph [ fistColumnWidth ]
+                [ El.el [ Font.bold ] (El.text "Unique stack traces (including ex. message)")
                 , helpIcon <|
                     "Total number unique stack traces including exception message "
                         ++ "(looking at both WHERE the failure occured AND the exception message)"
                 ]
-            , td [] [ text <| String.fromInt uniqueStacktracesAndMessagesCount ]
+            , El.text <| String.fromInt uniqueStacktracesAndMessagesCount
             ]
-        , tr []
-            [ td []
-                [ strong [] [ text "Unique stack traces" ]
+        , El.row []
+            [ El.paragraph [ fistColumnWidth ]
+                [ El.el [ Font.bold ] (El.text "Unique stack traces")
                 , helpIcon <|
                     "Total number unique stack traces that are different disregarding exception message "
                         ++ "(just looking at WHERE the failure was, ignoring exception message)"
                 ]
-            , td [] [ text <| String.fromInt uniqueStacktracesCount ]
+            , El.text <| String.fromInt uniqueStacktracesCount
             ]
         ]
 
 
-stackTraceView : Maybe GitInfo -> ClassAndMethod -> StackTraceMode -> ViewPort -> Html Msg
+stackTraceView : Maybe GitInfo -> ClassAndMethod -> StackTraceMode -> ViewPort -> Element Msg
 stackTraceView maybeGitInfo ( fqcn, _ ) stackTraceMode viewport =
     case stackTraceMode of
         NoStackTrace ->
-            text ""
+            El.none
 
         ShowStackTrace stackTrace ->
             stackTraceModal viewport
@@ -665,7 +676,7 @@ stackTraceView maybeGitInfo ( fqcn, _ ) stackTraceMode viewport =
                 )
 
         OneStackTracePicked _ ->
-            text ""
+            El.none
 
         TwoStackTracesPicked ( stackTrace1, color1 ) ( stackTrace2, color2 ) ->
             stackTraceModal viewport
@@ -762,9 +773,9 @@ white =
     El.rgb 1 1 1
 
 
-stackTraceModal : ViewPort -> El.Element Msg -> El.Element Msg -> Html Msg
+stackTraceModal : ViewPort -> El.Element Msg -> El.Element Msg -> Element Msg
 stackTraceModal viewport title body =
-    El.layout
+    El.el
         [ El.inFront <|
             El.column
                 [ El.centerX
@@ -813,17 +824,22 @@ modalHeight { height } =
     round <| 0.8 * height
 
 
-helpIcon : String -> Html a
+helpIcon : String -> Element a
 helpIcon helpText =
-    img
-        [ class "hint-image"
-        , src "images/q.png"
-        , title helpText
+    El.image
+        [ El.width (El.px 15)
+        , El.height (El.px 15)
         ]
-        []
+        { src = "images/q.png"
+        , description = helpText
+        }
 
 
-viewFailureDatesChart : ( Posix, Posix ) -> List ( TestFailure, Color ) -> Html a
+
+-- TODO migrate viewFailureDatesChart to Element
+
+
+viewFailureDatesChart : ( Posix, Posix ) -> List ( TestFailure, Color ) -> Element a
 viewFailureDatesChart ( fromDate, toDate ) colorizedFailures =
     let
         leastTimestamp : Float
@@ -853,6 +869,7 @@ viewFailureDatesChart ( fromDate, toDate ) colorizedFailures =
         )
         colorizedFailures
         |> div [ class "timeline" ]
+        |> El.html
 
 
 getSortedFailuresOf : ClassAndMethod -> GroupedFailures -> List TestFailure
@@ -860,83 +877,104 @@ getSortedFailuresOf classAndMethod =
     Maybe.withDefault [] << Dict.get classAndMethod
 
 
-failuresTable : StackTraceMode -> List ( TestFailure, Color ) -> Html Msg
+failuresTable : StackTraceMode -> List ( TestFailure, Color ) -> Element Msg
 failuresTable stackTraceMode colorizedFailures =
-    table [] (failuresTableHeaderRow :: List.map (failureRow stackTraceMode) colorizedFailures)
+    El.table []
+        { data = colorizedFailures
+        , columns =
+            [ { header = El.text "Failed on"
+              , width = El.px 100
+              , view = \( { date }, _ ) -> El.text <| formatDateTime date
+              }
+            , { header =
+                    El.row []
+                        [ El.text "Build URL"
+                        , helpIcon "Some build URLs are no longer available, because archived jobs are deleted after some time (usually a week)"
+                        ]
+              , width = El.px 100
+              , view =
+                    \( { url }, _ ) ->
+                        if String.isEmpty url then
+                            El.text "N/A"
 
+                        else
+                            El.link [] { url = url, label = El.text <| TestFailure.extractJobNameAndBuildNumber url }
+              }
+            , { header = El.text "Unique Stack Trace"
+              , width = El.px 100
+              , view =
+                    \( { stackTrace }, color ) ->
+                        El.el [ Background.color (translateColor color) ]
+                            (if isSelectedForComparison stackTraceMode stackTrace then
+                                El.text " "
 
-failuresTableHeaderRow : Html a
-failuresTableHeaderRow =
-    tr []
-        [ th [] [ text "Failed on" ]
-        , th [] [ text "Build URL", helpIcon "Some build URLs are no longer available, because archived jobs are deleted after some time (usually a week)" ]
-        , th [] [ text "Unique Stack Trace" ]
-        , th [] [ text "Stack Trace" ]
-        ]
+                             else
+                                El.text "Selected for comparison"
+                            )
+              }
+            , { header = El.text "Stack Trace"
+              , width = El.px 100
+              , view =
+                    \( { stackTrace }, color ) ->
+                        let
+                            ( newStackTraceMode, comparisonButtonLabel ) =
+                                case stackTraceMode of
+                                    NoStackTrace ->
+                                        ( OneStackTracePicked ( stackTrace, color )
+                                        , "Compare"
+                                        )
 
+                                    OneStackTracePicked ( stackTrace1, color1 ) ->
+                                        if stackTrace1 == stackTrace then
+                                            --This one already pick -> unpick it
+                                            ( NoStackTrace
+                                            , "Unselect"
+                                            )
 
-failureRow : StackTraceMode -> ( TestFailure, Color ) -> Html Msg
-failureRow stackTraceMode ( { url, date, stackTrace }, color ) =
-    let
-        buildLinkOrNA =
-            if String.isEmpty url then
-                text "N/A"
+                                        else
+                                            ( TwoStackTracesPicked ( stackTrace1, color1 ) ( stackTrace, color )
+                                            , "Compare with selected"
+                                            )
 
-            else
-                a [ href url ] [ text <| TestFailure.extractJobNameAndBuildNumber url ]
+                                    TwoStackTracesPicked _ _ ->
+                                        ( OneStackTracePicked ( stackTrace, color )
+                                        , "Compare"
+                                        )
 
-        ( newStackTraceMode, comparisonButtonLabel, isSelectedForComparison ) =
-            case stackTraceMode of
-                NoStackTrace ->
-                    ( OneStackTracePicked ( stackTrace, color )
-                    , "Compare"
-                    , False
-                    )
-
-                OneStackTracePicked ( stackTrace1, color1 ) ->
-                    if stackTrace1 == stackTrace then
-                        --This one already pick -> unpick it
-                        ( NoStackTrace
-                        , "Unselect"
-                        , True
-                        )
-
-                    else
-                        ( TwoStackTracesPicked ( stackTrace1, color1 ) ( stackTrace, color )
-                        , "Compare with selected"
-                        , False
-                        )
-
-                TwoStackTracesPicked _ _ ->
-                    ( OneStackTracePicked ( stackTrace, color )
-                    , "Compare"
-                    , False
-                    )
-
-                ShowStackTrace _ ->
-                    ( OneStackTracePicked ( stackTrace, color )
-                    , "Compare"
-                    , False
-                    )
-    in
-    tr []
-        [ td [] [ text <| formatDateTime date ]
-        , td [] [ buildLinkOrNA ]
-        , td [ style "background-color" (colorToHtml color) ] <|
-            if isSelectedForComparison then
-                [ text "Selected for comparison" ]
-
-            else
-                []
-        , td []
-            [ button
-                [ onClick <| SetStackTraceMode <| ShowStackTrace stackTrace ]
-                [ text "Show" ]
-            , button
-                [ onClick <| SetStackTraceMode newStackTraceMode ]
-                [ text comparisonButtonLabel ]
+                                    ShowStackTrace _ ->
+                                        ( OneStackTracePicked ( stackTrace, color )
+                                        , "Compare"
+                                        )
+                        in
+                        El.row []
+                            [ Input.button []
+                                { onPress = Just <| SetStackTraceMode <| ShowStackTrace stackTrace
+                                , label = El.text "Show"
+                                }
+                            , Input.button []
+                                { onPress = Just <| SetStackTraceMode newStackTraceMode
+                                , label = El.text comparisonButtonLabel
+                                }
+                            ]
+              }
             ]
-        ]
+        }
+
+
+isSelectedForComparison : StackTraceMode -> StackTrace -> Bool
+isSelectedForComparison stackTraceMode stackTrace =
+    case stackTraceMode of
+        OneStackTracePicked ( stackTrace1, _ ) ->
+            stackTrace1 == stackTrace
+
+        NoStackTrace ->
+            False
+
+        TwoStackTracesPicked _ _ ->
+            False
+
+        ShowStackTrace _ ->
+            False
 
 
 {-| YYYY-MM-DD HH:mm

@@ -3,7 +3,6 @@ module StacktraceDiff exposing (diffView)
 import Diff exposing (Change(..))
 import Element as El exposing (Color, Element)
 import Element.Background as Background
-import Html exposing (table)
 import TestFailure exposing (StackTrace, stackTraceToString)
 
 
