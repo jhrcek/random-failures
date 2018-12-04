@@ -1,24 +1,31 @@
 module Jenkins
-  ( getAllBuilds
+  ( findJobsRecursively
+  , getAllBuilds
   , getBuildNumber
   , getBuildStats
+  , getFolderItems
   , getJobName
   , getMasterPrJobUrls
   , getTestFailures
   , getUnstableBuilds
   , BuildUrl(BuildUrl)
+  , FolderUrl(FolderUrl)
   , JobUrl(JobUrl)
   , BuildStats(..)
   , BuildResult(..)
+  , FolderItem(..)
   ) where
 
 import qualified Data.List as List
 import qualified Data.Text as Text
+import qualified Data.Text.IO as Text
 import qualified Network.Wreq as Wreq
 import qualified Text.Atom.Feed as Atom
 
 import Control.Lens (Fold, filtered, to, (^.), (^..))
-import Data.Aeson (FromJSON, parseJSON, withObject, (.!=), (.:), (.:?))
+import Control.Monad ((<=<))
+import Data.Aeson (FromJSON, ToJSON, Value (String), object, parseJSON, toJSON,
+                   withObject, withText, (.!=), (.:), (.:?), (.=))
 import Data.Aeson.Lens (key, _Array, _JSON, _Number, _String)
 import Data.ByteString.Lazy (ByteString)
 import Data.Maybe (fromMaybe)
@@ -42,6 +49,105 @@ getBuildNumber :: BuildUrl -> Text
 getBuildNumber (BuildUrl url) = lastUrlComponent url
 
 newtype TestReportUrl = TestReportUrl Text
+
+newtype FolderUrl = FolderUrl Text deriving Show
+
+--------------------------------------------------------------------------------
+{-| Item in the listing of jobs -}
+data FolderItem = FolderItem
+    { fiItemType :: FolderItemType
+    , fiName     :: Text
+    , fiUrl      :: Text
+    } deriving Show
+
+data FolderItemType
+    = BuildFlow
+    | Folder
+    | FreestyleProject
+    | MatrixProject
+    | MavenModuleSet
+    | MultiJobProject
+    | WorkflowJob
+    | UnkwnownItemType Text
+    deriving Show
+
+instance FromJSON FolderItemType where
+    parseJSON = withText "FolderItemType" $ \t -> return $ case t of
+        "com.cloudbees.hudson.plugins.folder.Folder"         -> Folder
+        "com.cloudbees.plugins.flow.BuildFlow"               -> BuildFlow
+        "com.tikal.jenkins.plugins.multijob.MultiJobProject" -> MultiJobProject
+        "hudson.matrix.MatrixProject"                        -> MatrixProject
+        "hudson.maven.MavenModuleSet"                        -> MavenModuleSet
+        "hudson.model.FreeStyleProject"                      -> FreestyleProject
+        "org.jenkinsci.plugins.workflow.job.WorkflowJob"     -> WorkflowJob
+        other                                                -> UnkwnownItemType other
+
+instance ToJSON FolderItemType where
+    toJSON = String . Text.pack . show
+
+instance FromJSON FolderItem where
+    parseJSON = withObject "FolderItem" $ \o -> FolderItem
+        <$> o .: "_class"
+        <*> o .: "name"
+        <*> o .: "url"
+
+instance ToJSON FolderItem where
+    toJSON (FolderItem c n u) = object
+        [ "_class" .= c
+        , "name" .= n
+        , "url" .= u
+        ]
+
+getFolderItems :: FolderUrl -> IO [FolderItem]
+getFolderItems (FolderUrl folderUrl) = do
+    resp <- Wreq.get . Text.unpack $ folderUrl <> "/api/json"
+    return $ resp ^. Wreq.responseBody . to extractFolderItems
+
+extractFolderItems :: ByteString -> [FolderItem]
+extractFolderItems body =
+  body ^.. key "jobs" . _Array . traverse . _JSON
+
+{-| Traverse directory recurively and collect all the jobs -}
+findJobsRecursively :: FolderUrl -> IO [JobUrl]
+findJobsRecursively = go [] <=< getFolderItems
+  where
+    go :: [JobUrl] -> [FolderItem] -> IO [JobUrl]
+    go jobsSoFar [] = return jobsSoFar
+    go jobsSoFar (item:items) =
+      let itemUrl = fiUrl item
+          ignore = do
+              Text.putStrLn $ "Ignoring " <> Text.pack (show (fiItemType item)) <> " " <> itemUrl
+              go jobsSoFar items
+      in case fiItemType item of
+        Folder -> do
+            Text.putStrLn $ "Retrieving jobs from Folder " <> itemUrl
+            subItems <- getFolderItems $ FolderUrl itemUrl
+            go jobsSoFar (items ++ subItems)
+        MatrixProject      -> do
+            Text.putStrLn $ "Retrieving jobs from MatrixProject " <> itemUrl
+            jobsOfMatrix <- getMatrixJobConfigurations . JobUrl $ itemUrl
+            go (jobsOfMatrix ++ jobsSoFar) items
+        FreestyleProject   -> go (JobUrl itemUrl:jobsSoFar) items
+        WorkflowJob        -> ignore
+        MavenModuleSet     -> ignore
+        MultiJobProject    -> ignore
+        BuildFlow          -> ignore
+        UnkwnownItemType _ ->
+            error $ "Found item with unknown _class: " <> show item
+                   <> ". Please add it to the FolderItemType"
+
+
+getMatrixJobConfigurations :: JobUrl -> IO [JobUrl]
+getMatrixJobConfigurations (JobUrl matrixJobUrl) = do
+    resp <- Wreq.get . Text.unpack $ matrixJobUrl <> "/api/json"
+    return $ resp ^. Wreq.responseBody . to extractActiveConfigurations
+  where
+    extractActiveConfigurations :: ByteString -> [JobUrl]
+    extractActiveConfigurations body =
+      fmap JobUrl $ body ^..
+          key "activeConfigurations" . _Array . traverse
+          . key "url" . _String
+
 --------------------------------------------------------------------------------
 {-| Extract URLs of PR builder jobs that build from master branch -}
 getMasterPrJobUrls :: IO [JobUrl]
