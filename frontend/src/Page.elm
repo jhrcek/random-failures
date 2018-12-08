@@ -5,11 +5,9 @@ module Page exposing
     , toUrlHash
     )
 
-import Browser.Navigation
-import Color exposing (Color)
-import TestFailure exposing (ClassAndMethod, StackTrace, StackTraceMode(..), TestFailure)
+import TestFailure exposing (ClassAndMethod, StackTraceMode(..))
 import Url exposing (Url)
-import Url.Parser exposing ((</>), Parser, custom, map, oneOf, s, string, top)
+import Url.Parser exposing ((</>), Parser, map, oneOf, s, string, top)
 
 
 type Page

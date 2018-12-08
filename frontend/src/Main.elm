@@ -5,7 +5,7 @@ import Browser.Dom
 import Browser.Events
 import Browser.Navigation as Nav exposing (Key)
 import Color exposing (Color)
-import Dict exposing (Dict)
+import Dict
 import Element as El
 import Element.Background as Background
 import Element.Border as Border
@@ -253,7 +253,9 @@ type alias TableRecord =
 
 
 type alias ViewPort =
-    { width : Float, height : Float }
+    { width : Float
+    , height : Float
+    }
 
 
 {-| When the failure comes from setup method (@Before, @After etc), Jenkins uses class name as method name
@@ -647,11 +649,7 @@ failureDetailsSummary (( fqcn, _ ) as classAndMethod) gitHubLink totalFailures u
 
 
 stackTraceView : Maybe GitInfo -> ClassAndMethod -> StackTraceMode -> ViewPort -> Html Msg
-stackTraceView maybeGitInfo ( fqcn, method ) stackTraceMode viewport =
-    let
-        closeModal =
-            onClick (SetStackTraceMode NoStackTrace)
-    in
+stackTraceView maybeGitInfo ( fqcn, _ ) stackTraceMode viewport =
     case stackTraceMode of
         NoStackTrace ->
             text ""

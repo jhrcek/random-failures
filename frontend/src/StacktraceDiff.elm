@@ -1,13 +1,9 @@
 module StacktraceDiff exposing (diffView)
 
-import Color
 import Diff exposing (Change(..))
-import Element as El exposing (Color, Element, el)
+import Element as El exposing (Color, Element)
 import Element.Background as Background
-import Element.Events as Events
-import Element.Font as Font
-import Html exposing (Html, table, tr)
-import Html.Attributes exposing (style)
+import Html exposing (table)
 import TestFailure exposing (StackTrace, stackTraceToString)
 
 
