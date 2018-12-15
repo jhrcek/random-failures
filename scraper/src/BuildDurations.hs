@@ -13,11 +13,13 @@ import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Time.Clock (secondsToDiffTime)
 import Data.Time.LocalTime (timeToTimeOfDay)
+import Jenkins (BuildResult (SUCCESS, UNSTABLE), BuildStats,
+                FolderUrl (FolderUrl))
 
 {-| Scrape durations of downstream PR job builds with result SUCCESS/UNSTABLE builds -}
 printBuildTimesOfFinishedDownstreamPrJobs :: IO ()
 printBuildTimesOfFinishedDownstreamPrJobs = do
-    jobUrls <- J.getMasterPrJobUrls
+    jobUrls <- J.getJobsRecursively $ FolderUrl "https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest"
     runConduit
         $ yieldMany jobUrls
         .| filterC (Text.isSuffixOf "downstream-pullrequests" . J.getJobName)
@@ -36,8 +38,8 @@ printBuildTimesOfFinishedDownstreamPrJobs = do
                   else Text.putStrLn "N/A"
             )
       where
-        isFinished :: J.BuildStats -> Bool
-        isFinished stat = J.buildResult stat `elem` [J.SUCCESS, J.UNSTABLE]
+        isFinished :: BuildStats -> Bool
+        isFinished stat = J.buildResult stat `elem` [SUCCESS, UNSTABLE]
 
         formatDuration :: Integer -> Text
         formatDuration milis = Text.pack . show . timeToTimeOfDay . secondsToDiffTime $ div milis 1000

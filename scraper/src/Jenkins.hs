@@ -1,11 +1,10 @@
 module Jenkins
-  ( findJobsRecursively
-  , getAllBuilds
+  ( getAllBuilds
   , getBuildNumber
   , getBuildStats
   , getFolderItems
   , getJobName
-  , getMasterPrJobUrls
+  , getJobsRecursively
   , getTestFailures
   , getUnstableBuilds
   , BuildUrl(BuildUrl)
@@ -38,7 +37,7 @@ import Text.Feed.Import (parseFeedSource)
 import Text.Feed.Types (Feed (AtomFeed))
 import Text.Read (readMaybe)
 
-newtype JobUrl = JobUrl Text deriving Show
+newtype JobUrl = JobUrl Text deriving (Eq, Ord, Show)
 
 getJobName :: JobUrl -> Text
 getJobName (JobUrl url) = lastUrlComponent url
@@ -107,9 +106,9 @@ extractFolderItems :: ByteString -> [FolderItem]
 extractFolderItems body =
   body ^.. key "jobs" . _Array . traverse . _JSON
 
-{-| Traverse directory recurively and collect all the jobs -}
-findJobsRecursively :: FolderUrl -> IO [JobUrl]
-findJobsRecursively = go [] <=< getFolderItems
+{-| Traverse directory recursively and collect all the jobs -}
+getJobsRecursively :: FolderUrl -> IO [JobUrl]
+getJobsRecursively = go [] <=< getFolderItems
   where
     go :: [JobUrl] -> [FolderItem] -> IO [JobUrl]
     go jobsSoFar [] = return jobsSoFar
@@ -119,7 +118,7 @@ findJobsRecursively = go [] <=< getFolderItems
               Text.putStrLn $ "Ignoring " <> Text.pack (show (fiItemType item)) <> " " <> itemUrl
               go jobsSoFar items
       in case fiItemType item of
-        Folder -> do
+        Folder             -> do
             Text.putStrLn $ "Retrieving jobs from Folder " <> itemUrl
             subItems <- getFolderItems $ FolderUrl itemUrl
             go jobsSoFar (items ++ subItems)
@@ -147,19 +146,6 @@ getMatrixJobConfigurations (JobUrl matrixJobUrl) = do
       fmap JobUrl $ body ^..
           key "activeConfigurations" . _Array . traverse
           . key "url" . _String
-
---------------------------------------------------------------------------------
-{-| Extract URLs of PR builder jobs that build from master branch -}
-getMasterPrJobUrls :: IO [JobUrl]
-getMasterPrJobUrls = do
-    resp <- Wreq.get "https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest/api/json"
-    return $ resp ^. Wreq.responseBody . to extractPrJobUrls
-
-extractPrJobUrls :: ByteString -> [JobUrl]
-extractPrJobUrls body =
-    fmap JobUrl $ body ^..
-          key "jobs" . _Array . traverse
-        . key "url" . _String
 
 --------------------------------------------------------------------------------
 {-| Extract unstable build URLs from Job's "rssFailed" Atom feed -}
@@ -237,8 +223,7 @@ parseResult text =
 getTestFailures :: (BuildUrl, UTCTime) -> IO [TestFailure]
 getTestFailures (bu@(BuildUrl buildUrl), utcTime) = do
     resp <- Wreq.get $ Text.unpack testReportUrl
-    let failures = resp ^.. Wreq.responseBody . collectFailures
-    return failures
+    return $ resp ^.. Wreq.responseBody . collectFailures
   where
     (TestReportUrl testReportUrl) = toTestReportUrl bu
 

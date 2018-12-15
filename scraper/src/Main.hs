@@ -13,13 +13,14 @@ import Data.Monoid ((<>))
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Failure (TestFailure)
+import Jenkins (FolderUrl (FolderUrl))
 import Merge (mergeReports)
 import System.FilePath ((</>))
 import Util (lengthText)
 
 main :: IO ()
 main = do
-    jobUrls <- J.getMasterPrJobUrls
+    jobUrls <- J.getJobsRecursively $ FolderUrl "https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest"
     Text.putStrLn $ lengthText jobUrls <> " Jenkins jobs to analyze"
     testFailures <- runConduit
         $ yieldMany jobUrls
