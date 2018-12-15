@@ -16,7 +16,7 @@ import FormatNumber.Locales exposing (usLocale)
 import Html exposing (Html, a, button, div, h2, h3, img, input, li, strong, table, td, text, th, tr, ul)
 import Html.Attributes as Attr exposing (class, href, maxlength, src, style, target, title, type_, value)
 import Html.Events exposing (onClick, onInput)
-import Http exposing (Error(..))
+import Http exposing (Error(..), expectJson)
 import List.Extra
 import Page exposing (Page)
 import Regex
@@ -78,9 +78,10 @@ navigateTo url model =
 
 loadFailures : Cmd Msg
 loadFailures =
-    Http.get "failures.json" TestFailure.listDecoder
-        |> RemoteData.sendRequest
-        |> Cmd.map FailuresLoaded
+    Http.get
+        { url = "failures.json"
+        , expect = expectJson (FailuresLoaded << RemoteData.fromResult) TestFailure.listDecoder
+        }
 
 
 initialModel : Page -> Key -> Model
@@ -1043,9 +1044,9 @@ showHttpError error =
                 NetworkError ->
                     "NetworkError"
 
-                BadStatus { url, status } ->
-                    "BadStatus { code = " ++ String.fromInt status.code ++ ", message = " ++ status.message ++ ", url = " ++ url ++ " }"
+                BadStatus statusCode ->
+                    "BadStatus " ++ String.fromInt statusCode
 
-                BadPayload _ _ ->
-                    "BadPayload"
+                BadBody str ->
+                    "BadBody " ++ str
            )
