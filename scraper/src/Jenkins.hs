@@ -5,6 +5,7 @@ module Jenkins
   , getFolderItems
   , getJobName
   , getJobsRecursively
+  , getMatrixJobConfigurations
   , getTestFailures
   , getUnstableBuilds
   , BuildUrl(BuildUrl)
