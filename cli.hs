@@ -1,6 +1,7 @@
 #!/usr/bin/env stack
--- stack script --resolver lts-12.21 --package turtle
+-- stack script --resolver lts-13.1 --package turtle
 {-# LANGUAGE OverloadedStrings #-}
+import Data.Maybe (isNothing)
 import Prelude hiding (FilePath)
 import Turtle
 
@@ -28,7 +29,7 @@ buildFrontend =
 addGeneratedOnInfo :: IO ()
 addGeneratedOnInfo = do
     d <- today
-    inplace (const d <$> text "GENERATED_ON_PLACEHOLDER") "dist/js/elm.js"
+    inplace (d <$ text "GENERATED_ON_PLACEHOLDER") "dist/js/elm.js"
 
 
 today :: IO Text
@@ -38,7 +39,7 @@ today = fmap lineToText . single $ inshell "date +%F" empty
 minifyJs :: IO ()
 minifyJs = do
     maybeUglifyPath <- which "uglifyjs"
-    when (maybeUglifyPath == Nothing) installUglifyjs
+    when (isNothing maybeUglifyPath) installUglifyjs
     shells "uglifyjs dist/js/elm.js --compress 'pure_funcs=\"F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9\",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output=dist/js/elm.js" empty
 
 installUglifyjs :: IO ()
