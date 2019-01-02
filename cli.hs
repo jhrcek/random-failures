@@ -51,7 +51,7 @@ installUglifyjs = do
 scrapeFailures :: IO ()
 scrapeFailures =
     with (pushd "scraper") $ \() ->
-        shells "stack build && stack exec scraper" empty
+        shells "stack build && stack exec scraper -- --kiegroup-dir /home/jhrcek/Devel/github.com/kiegroup --jenkins-folder https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest" empty
 
 
 deployToGhPages :: IO ()

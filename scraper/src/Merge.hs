@@ -9,6 +9,7 @@ import qualified Failure
 import qualified GitHub
 import qualified System.Directory as Dir
 import qualified System.FilePath as FP
+import qualified Turtle
 
 import Data.Functor ((<&>))
 import Data.Map (Map)
@@ -20,14 +21,14 @@ import Failure (TestFailure, url)
 import GitHub (FQN (FQN), GitInfo)
 import System.FilePath ((</>))
 
-mergeReports :: FilePath -> IO ()
-mergeReports reportsDir = do
+mergeReports :: FilePath -> Turtle.FilePath -> IO ()
+mergeReports reportsDir kieGroupDir = do
     reports <- listReports reportsDir
     putStrLn $ "Found " <> show (length reports) <> " failure report files. Loading failures..."
     eitherFailures <- traverse loadFailures reports
     isLessThanHalfYearOld <- createDateFilter
     validUrlSet <- getValidBuildUrls reportsDir
-    fqnToGitInfo <- GitHub.loadFqnToGitInfoMap
+    fqnToGitInfo <- GitHub.loadFqnToGitInfoMap kieGroupDir
     let failures = case sequence eitherFailures of
             Left err -> error $ "Something went wrong when loading failures: " <> err
             Right fss -> fmap (addGitInfo fqnToGitInfo . removeInvalidUrl validUrlSet)

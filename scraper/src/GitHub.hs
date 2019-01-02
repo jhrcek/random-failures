@@ -1,11 +1,11 @@
-{-# LANGUAGE DeriveAnyClass    #-}
-{-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE DeriveAnyClass     #-}
+{-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE RecordWildCards    #-}
 
  module GitHub(FQN(FQN), GitInfo(GitInfo), loadFqnToGitInfoMap) where
 
-import qualified Config
 import qualified Control.Foldl as Fold
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -15,23 +15,26 @@ import Data.Aeson (FromJSON, ToJSON)
 import Data.Map (Map)
 import Data.Text (Text)
 import GHC.Generics (Generic)
-import Turtle
+import Prelude hiding (FilePath)
+import Turtle (FilePath, empty, fold, format, inshell, l, pushd, with)
 
 -- Relative path of test class java file in kiegroup folder
 newtype TestPath = TestPath Text deriving Show
 -- Fully Qualified Name of the test class
-newtype FQN = FQN Text deriving (Eq, Ord, Show, Generic, ToJSON)
+newtype FQN = FQN Text
+  deriving (Eq, Ord, Show, Generic)
+  deriving anyclass (ToJSON)
+
 -- Info required to construct path of the source code of the class on Git Hub
 -- The url can be constructed like so: "https://github.com/kiegroup/" <> repo <> "/blob/master/" <> pathInRepo
 data GitInfo = GitInfo {repo :: Text, pathInRepo :: Text} deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
-loadFqnToGitInfoMap :: IO (Map FQN GitInfo)
-loadFqnToGitInfoMap =
-    Map.fromList . fmap (toFqn &&& toGitInfo) <$> findTestPaths
+loadFqnToGitInfoMap :: FilePath -> IO (Map FQN GitInfo)
+loadFqnToGitInfoMap kieGroupDir =
+    Map.fromList . fmap (toFqn &&& toGitInfo) <$> findTestPaths kieGroupDir
 
-findTestPaths :: IO [TestPath]
-findTestPaths = do
-    kieGroupDir <- fromText . Text.pack <$> Config.getKieGroupDir
+findTestPaths :: FilePath -> IO [TestPath]
+findTestPaths kieGroupDir =
     with (pushd kieGroupDir) $ \_ ->
       fmap (TestPath . format l) <$>
           fold (inshell "find . -wholename '*src/test/java/*Test.java' -or -wholename '*src/test/java/*IT.java'" empty) Fold.list
