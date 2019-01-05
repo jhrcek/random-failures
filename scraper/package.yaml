@@ -18,17 +18,16 @@ dependencies:
 - conduit
 - containers
 - feed
+- foldl
 - lens
 - lens-aeson
-- foldl
+- optparse-applicative
+- statistics
 - text
 - time
-- wreq
-- directory
-- filepath
-- statistics
 - turtle
 - vector
+- wreq
 executables:
   scraper:
     source-dirs:    src

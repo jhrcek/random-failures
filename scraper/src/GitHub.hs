@@ -27,7 +27,10 @@ newtype FQN = FQN Text
 
 -- Info required to construct path of the source code of the class on Git Hub
 -- The url can be constructed like so: "https://github.com/kiegroup/" <> repo <> "/blob/master/" <> pathInRepo
-data GitInfo = GitInfo {repo :: Text, pathInRepo :: Text} deriving (Eq, Show, Generic, ToJSON, FromJSON)
+data GitInfo = GitInfo
+    { repo       :: Text
+    , pathInRepo :: Text
+    } deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
 loadFqnToGitInfoMap :: FilePath -> IO (Map FQN GitInfo)
 loadFqnToGitInfoMap kieGroupDir =
