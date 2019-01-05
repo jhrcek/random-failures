@@ -9,13 +9,13 @@ import Data.Time.Clock (UTCTime)
 import GHC.Generics (Generic)
 import GitHub (GitInfo)
 
-{-| JenkinsTestResult serves as input for our analyis.
+{-| JenkinsTestResult serves as input for our analysis.
     It comes from $BUILD_URL/testReport/api/json?tree=suites[cases[className,errorDetails,errorStackTrace,name,status]]
     It contains the following data about each test executed
 
 { "className": "org.optaplanner.openshift.employeerostering.webapp.skill.SkillRestServiceIT"
 , "errorDetails": null
-, "errorStackTrace": null
+, "errorStackTrace": ".."
 , "name": "testDeleteNonExistingSkill"
 , "status": "PASSED"
 }
@@ -52,7 +52,8 @@ toFailure buildUrl builtOn result = TestFailure
     }
 
 {-| TestFailure represents similar data which,
-in addition to JenkinsTestResults also contains date of failure and build URL
+in addition to JenkinsTestResults also contains date of failure, build URL and
+info useable to locate the class source code on GitHub
 -}
 data TestFailure = TestFailure
     { url        :: !Text

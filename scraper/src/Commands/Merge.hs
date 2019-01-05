@@ -1,67 +1,54 @@
-module Merge (mergeReports) where
+{-# LANGUAGE NamedFieldPuns #-}
+module Commands.Merge (mergeReports) where
 
-import qualified Config
 import qualified Data.Aeson as Aeson
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Failure
 import qualified GitHub
-import qualified System.Directory as Dir
-import qualified System.FilePath as FP
 import qualified Turtle
 
-import Data.Functor ((<&>))
 import Data.Map (Map)
 import Data.Monoid ((<>))
 import Data.Set (Set)
 import Data.Text (Text)
 import Data.Time.Clock (addUTCTime, getCurrentTime, nominalDay)
-import Failure (TestFailure, url)
+import Failure (TestFailure (..), url)
 import GitHub (FQN (FQN), GitInfo)
-import System.FilePath ((</>))
 
-mergeReports :: FilePath -> Turtle.FilePath -> IO ()
-mergeReports reportsDir kieGroupDir = do
-    reports <- listReports reportsDir
-    putStrLn $ "Found " <> show (length reports) <> " failure report files. Loading failures..."
-    eitherFailures <- traverse loadFailures reports
+mergeReports :: FilePath -> FilePath -> FilePath -> Turtle.FilePath -> IO ()
+mergeReports archivedReport newReport outputReport kieGroupDir = do
+    putStrLn "Loading failures..."
+    eitherFailures <- sequence <$> traverse loadFailures [archivedReport, newReport]
     isLessThanHalfYearOld <- createDateFilter
-    validUrlSet <- getValidBuildUrls reportsDir
+    validUrlSet <- getValidBuildUrls newReport
     fqnToGitInfo <- GitHub.loadFqnToGitInfoMap kieGroupDir
-    let failures = case sequence eitherFailures of
+    let failures = case eitherFailures of
             Left err -> error $ "Something went wrong when loading failures: " <> err
             Right fss -> fmap (addGitInfo fqnToGitInfo . removeInvalidUrl validUrlSet)
                         . filter isLessThanHalfYearOld
                         . List.nub
                         $ concat fss
-    finalReport <- Config.getFrontendDistDir <&> (<> "failures.json")
-    Aeson.encodeFile finalReport failures
-    putStrLn $ show (length failures) <> " unique failures saved to " <> finalReport
+    Aeson.encodeFile outputReport failures
+    putStrLn $ show (length failures) <> " unique failures saved to " <> outputReport
 
-{- Create filter that accepts failures from past 6 months -}
+{- Create predicate that accepts failures from past 6 months -}
 createDateFilter :: IO (TestFailure -> Bool)
 createDateFilter = do
     now <- getCurrentTime
-    let pastDate = addUTCTime (-(365/2) * nominalDay) now
-    return $ \failure -> Failure.date failure >= pastDate
-
-listReports :: FilePath -> IO [FilePath]
-listReports reportsDir = do
-  reports <- Dir.listDirectory reportsDir
-  return $ (reportsDir </>) <$> filter (List.isPrefixOf "failures_" . FP.takeFileName) reports
+    let halfYearAgo = addUTCTime (-(365/2) * nominalDay) now
+    return $ \TestFailure{date} -> date >= halfYearAgo
 
 loadFailures :: FilePath -> IO (Either String [TestFailure])
 loadFailures = Aeson.eitherDecodeFileStrict
 
-{- We want to avoid showing build URLs which are no longer valid (= corresponding build has been removed from Jenkins).
+{- We want to avoid showing build URLs which are no longer valid
+   (= corresponding build has been removed from Jenkins).
    At the time of scraping, only URLs that end up in the latest report are valid.
 -}
 getValidBuildUrls :: FilePath -> IO (Set Text)
-getValidBuildUrls reportsDir =
-    fmap (Set.fromList . either (const []) (fmap Failure.url))
-    . loadFailures . List.maximum {- latest report = max in lexicographical order -}
-     =<< listReports reportsDir
+getValidBuildUrls newReport =
+    Set.fromList . either (const []) (fmap Failure.url) <$> loadFailures newReport
 
 removeInvalidUrl :: Set Text -> TestFailure -> TestFailure
 removeInvalidUrl validUrls failure

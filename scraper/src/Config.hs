@@ -1,38 +1,80 @@
 module Config
-    ( getReportsDir
-    , getFrontendDistDir
-    , parse
-    , Config(..)
+    ( parseCommand
+    , getReportsDir
+    , Command(..)
     ) where
 
 import qualified Turtle
 
 import Data.Functor ((<&>))
 import Jenkins (FolderUrl (..))
+import Options.Applicative
+import qualified Options.Applicative as A
 import System.Environment (getEnv)
-import Turtle.Options (Parser, optPath, optText, options)
 
 getReportsDir :: IO FilePath
 getReportsDir = getEnv "HOME" <&> (<> "/Dropbox/Projects/random-failures/")
 
-getFrontendDistDir :: IO FilePath
-getFrontendDistDir = getEnv "HOME" <&> (<> "/Devel/github.com/jhrcek/random-failures/frontend/dist/")
+data Command
+    = Scrape
+        { jenkinsJobsFolder :: FolderUrl
+        , outputReport      :: FilePath }
+    | Merge
+        { kiegroupDir    :: Turtle.FilePath
+        , archivedReport :: FilePath -- ^ The old report containing past test failures
+        , newReport      :: FilePath -- ^ The fresh report containing data for the past week or so
+        , outputReport   :: FilePath -- ^ The output report containing everything, deduplicated and enriched with github link info + updated build URLs
+        }
+    deriving Show
 
+commandParser :: A.Parser Command
+commandParser = subparser
+    ( command "scrape" (info (helper <*> scrapeParser)
+        (progDesc "Scrape failures from all jobs in given Jenkins directory and save them to a file"))
+   <> command "merge" (info (helper <*> mergeParser)
+        (progDesc "Mege failures into single file"))
+    )
 
-data Config = Config
-    { kiegroupDir       :: Turtle.FilePath
-    , jenkinsJobsFolder :: FolderUrl
-    }
+scrapeParser :: A.Parser Command
+scrapeParser = Scrape
+    <$> (FolderUrl <$> strOption
+            ( long "jenkins-directory"
+           <> metavar "URL"
+           <> value "https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest"
+           <> help "Jenkins directory containing jobs from which failures should be scraped"
+            )
+        )
+    <*> strOption
+            ( long "output"
+           <> metavar "FILE"
+           <> help "Output file where the failures will be saved"
+            )
 
-parse :: IO Config
-parse =
-    options "Jenkins job test failures scraper" configParser
+mergeParser :: A.Parser Command
+mergeParser = Merge
+    <$> strOption
+        ( long "kiegroup-dir"
+       <> metavar "DIRECTORY"
+       <> help "Directory, where all kiegroup projects have been cloned"
+        )
+    <*> strOption
+        ( long "archived-report"
+       <> metavar "FILE"
+       <> help "JSON File containing test failures from the past"
+        )
+    <*> strOption
+        ( long "new-report"
+       <> metavar "FILE"
+       <> help "JSON File containing freshly scraped test failures"
+        )
+    <*> strOption
+        ( long "output"
+       <> metavar "FILE"
+       <> help "Output file where the failures will be saved"
+        )
 
-configParser :: Parser Config
-configParser = Config
-    <$> optPath "kiegroup-dir" 'd' "Directory, where all kiegroup projects have been cloned"
-    <*> folderUrlParser
+parseCommand :: IO Command
+parseCommand = execParser cliParser
 
-folderUrlParser :: Parser FolderUrl
-folderUrlParser =
-    FolderUrl <$> optText "jenkins-folder" 'j' "Jenkins folder containing jobs from which failures should be scraped"
+cliParser :: ParserInfo Command
+cliParser = info (helper <*> commandParser) fullDesc
