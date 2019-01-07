@@ -25,9 +25,9 @@ mergeReports archivedReport newReport outputReport kieGroupDir = do
     fqnToGitInfo <- GitHub.loadFqnToGitInfoMap kieGroupDir
     let failures = case eitherFailures of
             Left err -> error $ "Something went wrong when loading failures: " <> err
-            Right fss -> fmap (addGitInfo fqnToGitInfo . removeInvalidUrl validUrlSet)
+            Right fss -> List.nub
+                        . fmap (addGitInfo fqnToGitInfo . removeInvalidUrl validUrlSet)
                         . filter isLessThanHalfYearOld
-                        . List.nub
                         $ concat fss
     Aeson.encodeFile outputReport failures
     putStrLn $ show (length failures) <> " unique failures saved to " <> outputReport
