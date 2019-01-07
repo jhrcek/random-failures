@@ -8,8 +8,9 @@ import qualified Turtle
 
 import Data.Functor ((<&>))
 import Jenkins (FolderUrl (..))
-import Options.Applicative
-import qualified Options.Applicative as A
+import Options.Applicative (Parser, ParserInfo, command, execParser, fullDesc,
+                            help, helper, info, long, metavar, progDesc,
+                            strOption, subparser, value)
 import System.Environment (getEnv)
 
 getReportsDir :: IO FilePath
@@ -27,7 +28,7 @@ data Command
         }
     deriving Show
 
-commandParser :: A.Parser Command
+commandParser :: Parser Command
 commandParser = subparser
     ( command "scrape" (info (helper <*> scrapeParser)
         (progDesc "Scrape failures from all jobs in given Jenkins directory and save them to a file"))
@@ -35,7 +36,7 @@ commandParser = subparser
         (progDesc "Mege failures into single file"))
     )
 
-scrapeParser :: A.Parser Command
+scrapeParser :: Parser Command
 scrapeParser = Scrape
     <$> (FolderUrl <$> strOption
             ( long "jenkins-directory"
@@ -50,7 +51,7 @@ scrapeParser = Scrape
            <> help "Output file where the failures will be saved"
             )
 
-mergeParser :: A.Parser Command
+mergeParser :: Parser Command
 mergeParser = Merge
     <$> strOption
         ( long "kiegroup-dir"
