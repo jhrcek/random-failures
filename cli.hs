@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
--- stack script --resolver lts-13.1 --package turtle
+-- stack script --resolver lts-13.5 --package turtle
 {-# LANGUAGE OverloadedStrings #-}
 import Data.Maybe (isNothing)
 import Prelude hiding (FilePath)
@@ -22,14 +22,7 @@ buildFrontend :: IO ()
 buildFrontend =
     with (pushd "frontend") $ \() -> do
         shells "elm make --optimize src/Main.elm --output=dist/js/elm.js" empty
-        addGeneratedOnInfo
         minifyJs
-
-
-addGeneratedOnInfo :: IO ()
-addGeneratedOnInfo = do
-    d <- today
-    inplace (d <$ text "GENERATED_ON_PLACEHOLDER") "dist/js/elm.js"
 
 
 today :: IO Text

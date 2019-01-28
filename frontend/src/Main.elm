@@ -348,11 +348,11 @@ description : ( Posix, Posix ) -> Html Msg
 description ( fromDate, toDate ) =
     div []
         [ h2 [] [ text "Random test failure analysis" ]
-        , text "This report was generated on GENERATED_ON_PLACEHOLDER and lists most"
+        , text "This report lists most"
         , helpIcon "Builds with more than 50 test failures are excluded, because they add a lot of data without providing much value for flaky test identification."
         , text "test failures in "
         , a [ href "https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest/" ] [ text "rhba-jenkins PR jobs" ]
-        , text <| " (master only) from " ++ formatDate fromDate ++ " to " ++ formatDate toDate ++ "."
+        , text <| " (master only) that occurred from " ++ formatDate fromDate ++ " to " ++ formatDate toDate ++ "."
         ]
 
 
