@@ -5,7 +5,7 @@ The goal of this project is to make it possible to identify flaky tests by aggre
 The project consists of 2 parts:
 - A Haskell program which
     - downloads test results of all unstable builds of jobs from [master pullrequests folder](https://rhba-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/KIE/job/master/job/pullrequest/) of RHBA Jenkins. For each failure it saves 5 items: job URL, test class and test method name, stack trace and date of build.
-    - searches for the path of each test class withing local filesystem (starting from folder where all kiegroup repositores are cloned) in order to provide GitHub link functionality.
+    - searches for the path of each test class within local filesystem (starting from folder where all kiegroup repositories are cloned) in order to provide GitHub link functionality.
 - A single page Elm application which enables browsing data scraped by the above script. This is deployed at [janhrcek.cz/random-failures/](http://janhrcek.cz/random-failures/) and updated with new data on weekly basis.
 
 ## Updating the report

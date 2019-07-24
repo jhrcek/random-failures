@@ -33,7 +33,7 @@ commandParser = subparser
     ( command "scrape" (info (helper <*> scrapeParser)
         (progDesc "Scrape failures from all jobs in given Jenkins directory and save them to a file"))
    <> command "merge" (info (helper <*> mergeParser)
-        (progDesc "Mege failures into single file"))
+        (progDesc "Merge failures into single file"))
     )
 
 scrapeParser :: Parser Command

@@ -44,8 +44,8 @@ pageParser =
         ]
 
 
-{-| Altough elm/browser docs claim thas
-t string parameters are percent decoded, it's not true
+{-| Although elm/browser docs claim that
+string parameters are percent decoded, it's not true
 -}
 percDecode : String -> String
 percDecode encoded =
