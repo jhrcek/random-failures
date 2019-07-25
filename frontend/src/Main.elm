@@ -408,7 +408,7 @@ faq =
                     ++ "A test is considered randomly failing if all of the following conditions hold (open to discussion!):"
             , ul []
                 [ li [] [ text "Failed 5 or more times" ]
-                , li [] [ text "Last failure ocurred no longer than 14 days ago" ]
+                , li [] [ text "Last failure occurred no longer than 14 days ago" ]
                 , li [] [ text "Standard deviation of failure dates is greater than 5 days" ]
                 ]
             ]
@@ -633,7 +633,7 @@ failureDetailsSummary (( fqcn, _ ) as classAndMethod) gitHubLink totalFailures u
                 [ strong [] [ text "Unique stack traces (including ex. message)" ]
                 , helpIcon <|
                     "Total number unique stack traces including exception message "
-                        ++ "(looking at both WHERE the failure occured AND the exception message)"
+                        ++ "(looking at both WHERE the failure occurred AND the exception message)"
                 ]
             , td [] [ text <| String.fromInt uniqueStacktracesAndMessagesCount ]
             ]

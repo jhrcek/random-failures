@@ -53,7 +53,7 @@ toFailure buildUrl builtOn result = TestFailure
 
 {-| TestFailure represents similar data which,
 in addition to JenkinsTestResults also contains date of failure, build URL and
-info useable to locate the class source code on GitHub
+info usable to locate the class source code on GitHub
 -}
 data TestFailure = TestFailure
     { url        :: !Text
